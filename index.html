@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0f172a">
+<title>Fotos Pátio CRV</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topo">
+  <button class="voltar oculto" id="btnVoltar" aria-label="Voltar">‹</button>
+  <h1 id="titulo">Fotos Pátio CRV</h1>
+  <button class="selo pend oculto" id="seloPend">⬆ 0</button>
+  <span class="selo" id="seloRede">…</span>
+  <button class="selo" id="btnMenu" aria-label="Menu">☰</button>
+</header>
+
+<main>
+  <!-- LOGIN -->
+  <section id="telaLogin" class="oculto">
+    <div class="cartao">
+      <h2>Entrar</h2>
+      <label for="loginUsuario">Usuário</label>
+      <input type="text" id="loginUsuario" autocomplete="username" autocapitalize="none">
+      <label for="loginSenha">Senha</label>
+      <input type="password" id="loginSenha" autocomplete="current-password">
+      <div class="erro" id="loginErro"></div>
+      <button class="btn" id="btnEntrar">Entrar</button>
+      <p class="suave">Entre uma vez com internet. Depois o app funciona sem sinal.</p>
+    </div>
+  </section>
+
+  <!-- PÁTIOS -->
+  <section id="telaPatios" class="oculto">
+    <div class="titulo-secao">Pátios ativos</div>
+    <div class="grade" id="listaPatios"></div>
+    <p class="suave" id="atualizadoEm"></p>
+  </section>
+
+  <!-- CATEGORIAS -->
+  <section id="telaCategorias" class="oculto">
+    <div class="titulo-secao">O que vai fotografar?</div>
+    <div class="grade" id="listaCategorias"></div>
+  </section>
+
+  <!-- LISTA DE IDS -->
+  <section id="telaLista" class="oculto">
+    <div class="busca">
+      <input type="search" id="busca" placeholder="Buscar NRO, placa ou modelo" autocomplete="off">
+      <div class="filtros">
+        <button data-filtro="pendentes" class="ativo">Pendentes</button>
+        <button data-filtro="feitos">Fotografados</button>
+        <button data-filtro="todos">Todos</button>
+      </div>
+    </div>
+    <div id="listaIds"></div>
+    <button class="btn cinza" id="btnManual">Digitar NRO fora da lista</button>
+  </section>
+
+  <!-- FILA DE ENVIO -->
+  <section id="telaFila" class="oculto">
+    <div class="cartao">
+      <div id="filaResumo"></div>
+      <div class="linha-btns"><button class="btn pequeno" id="btnEnviarAgora">Enviar agora</button></div>
+    </div>
+    <div id="filaItens"></div>
+  </section>
+</main>
+
+<div class="rodape-fixo oculto" id="rodapeFoto">
+  <div class="detalhe" id="rodapeDetalhe"></div>
+  <button class="btn verde" id="btnTirarFotos" disabled>📷 Tirar fotos</button>
+</div>
+
+<!-- CÂMERA -->
+<div class="camera oculto" id="camera">
+  <video id="video" playsinline muted autoplay></video>
+  <div class="cab"><span id="camTitulo"></span><button class="selo oculto" id="btnLanterna">🔦</button></div>
+  <div class="miniaturas" id="miniaturas"></div>
+  <div class="controles">
+    <button class="btn cinza pequeno" id="btnCamCancelar">Cancelar</button>
+    <button class="obturador" id="btnObturador" aria-label="Tirar foto"></button>
+    <button class="btn verde pequeno" id="btnCamConfirmar" disabled>Confirmar (0)</button>
+  </div>
+  <input type="file" accept="image/*" capture="environment" id="inputArquivo" class="oculto">
+</div>
+<div class="flash-tela" id="flashTela"></div>
+
+<script src="config.js"></script>
+<script src="sync-core.js"></script>
+<script src="campo.js"></script>
+</body>
+</html>
