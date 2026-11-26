@@ -66,6 +66,11 @@
     return j.data;
   }
 
+  async function shaBlob(blob) {
+    const h = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+    return Array.from(new Uint8Array(h)).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  }
+
   async function blobParaBase64(blob) {
     const buf = new Uint8Array(await blob.arrayBuffer());
     let s = '';
@@ -100,10 +105,14 @@
         if (item.travada) continue; // erro permanente, aguarda ação do usuário
         try {
           const imagem = await blobParaBase64(item.blob);
-          await chamarApi('enviarFoto', {
+          const hash = await shaBlob(item.blob);
+          const resp = await chamarApi('enviarFoto', {
             uuid: item.uuid, loteId: item.loteId, nro: item.nro, categoria: item.categoria,
-            tiradaEm: item.tiradaEm, foraDaLista: !!item.foraDaLista, imagem: imagem
+            tiradaEm: item.tiradaEm, foraDaLista: !!item.foraDaLista, imagem: imagem, sha256: hash
           }, token);
+          // só apaga do celular se o servidor confirmar a mesma impressão digital
+          const confere = resp && (resp.sha256 === hash || (resp.duplicado && !resp.sha256));
+          if (!confere) { const e = new Error('Servidor não confirmou a integridade da foto.'); e.code = 'VERIFICACAO'; throw e; }
           await filaDel(item.uuid);
           await marcarEnviadoLocal(item);
           enviadas++;
@@ -129,5 +138,5 @@
     return executar();
   }
 
-  g.Nucleo = { abrirDB, kvGet, kvSet, kvDel, filaTodos, filaPut, filaDel, filaContar, chamarApi, sincronizarFila, blobParaBase64 };
+  g.Nucleo = { abrirDB, kvGet, kvSet, kvDel, filaTodos, filaPut, filaDel, filaContar, chamarApi, sincronizarFila, blobParaBase64, shaBlob };
 })(self);

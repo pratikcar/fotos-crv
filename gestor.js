@@ -95,7 +95,7 @@
     c.appendChild(el('div', 'suave', 'Criado em ' + data(l.criadoEm) + (l.arquivo ? ' · ' + l.arquivo : '')));
     const nums = el('div', 'resumo-num');
     [[l.fotografados + ' / ' + l.destinaveis, 'fotografados'], [l.total - l.destinaveis, 'não destinar'], [l.fotos, 'fotos'],
-      [l.naoBaixadas, 'fotos novas p/ baixar'], [l.foraDaLista, 'fora da lista']].forEach(function (n) {
+      [l.naoBaixadas, 'fotos ainda não baixadas'], [l.foraDaLista, 'fora da lista']].forEach(function (n) {
       const d = el('div'); d.appendChild(el('b', null, String(n[0]))); d.appendChild(document.createTextNode(n[1])); nums.appendChild(d);
     });
     c.appendChild(nums);
@@ -103,27 +103,25 @@
     barra.appendChild(p); c.appendChild(barra);
     const status = el('div', 'suave');
     const btns = el('div', 'linha-btns');
-    const bNovas = el('button', 'btn pequeno verde', '⬇ Baixar novas (' + l.naoBaixadas + ')');
-    bNovas.disabled = !l.naoBaixadas;
-    bNovas.addEventListener('click', function () { baixar(l, true, status, btns); });
-    const bTodas = el('button', 'btn pequeno', '⬇ Baixar todas (' + l.fotos + ')');
-    bTodas.disabled = !l.fotos;
-    bTodas.addEventListener('click', function () { baixar(l, false, status, btns); });
-    const bIds = el('button', 'btn pequeno cinza', 'Ver IDs');
     const detalhe = el('div');
+    const bBaixar = el('button', 'btn pequeno verde', '⬇ Baixar fotos' + (l.naoBaixadas ? ' (' + l.naoBaixadas + ' ainda não baixadas)' : ''));
+    bBaixar.disabled = !l.fotos;
+    bBaixar.addEventListener('click', function () { painelBaixar(l, detalhe, status); });
+    const bIds = el('button', 'btn pequeno cinza', 'Ver IDs');
     bIds.addEventListener('click', function () { verIds(l, detalhe); });
     const bAtivo = el('button', 'btn pequeno ' + (l.ativo ? 'vermelho' : 'cinza'), l.ativo ? 'Encerrar pátio' : 'Reabrir pátio');
     bAtivo.addEventListener('click', async function () {
       if (l.ativo && !confirm('Encerrar o pátio ' + l.patio + (l.numeroLote ? ' (lista ' + l.numeroLote + ')' : '') + '? Ele some do app de campo. Fotos já guardadas no celular ainda serão enviadas.')) return;
       try { await api('definirAtivo', { loteId: l.loteId, ativo: !l.ativo }); carregarLotes(); } catch (e) { alert(e.message); }
     });
-    [bNovas, bTodas, bIds, bAtivo].forEach(function (b) { btns.appendChild(b); });
+    [bBaixar, bIds, bAtivo].forEach(function (b) { btns.appendChild(b); });
     c.appendChild(btns); c.appendChild(status); c.appendChild(detalhe);
     return c;
   }
 
   async function verIds(l, box) {
-    if (box.childNodes.length) { box.textContent = ''; return; }
+    if (box.dataset.painel === 'ids') { box.textContent = ''; box.dataset.painel = ''; return; }
+    box.textContent = ''; box.dataset.painel = 'ids';
     box.appendChild(el('p', 'suave', 'Carregando…'));
     let vs;
     try { vs = await api('veiculosLote', { loteId: l.loteId }); } catch (e) { box.textContent = ''; box.appendChild(el('p', 'erro', e.message)); return; }
@@ -161,14 +159,79 @@
   }
 
   // ---------- download .zip ----------
-  async function baixar(l, somenteNovas, status, btns) {
-    const botoes = btns.querySelectorAll('button');
+  function dataBR(iso) { const p = String(iso).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso; }
+  function dataDaFoto(f) { return String(f.caminho).split('/')[1] || ''; }
+
+  async function painelBaixar(l, box, status) {
+    if (box.dataset.painel === 'baixar') { box.textContent = ''; box.dataset.painel = ''; return; }
+    box.textContent = ''; box.dataset.painel = 'baixar';
+    box.appendChild(el('p', 'suave', 'Carregando fotos…'));
+    let fotos;
+    try { fotos = await api('listarFotos', { loteId: l.loteId, somenteNaoBaixadas: false }); }
+    catch (e) { box.textContent = ''; box.appendChild(el('p', 'erro', e.message)); return; }
+    box.textContent = '';
+    const naoBaixadas = fotos.filter(function (f) { return !f.baixada; });
+    const porData = {};
+    fotos.forEach(function (f) {
+      const d = dataDaFoto(f);
+      if (!porData[d]) porData[d] = { total: 0, ja: 0 };
+      porData[d].total++; if (f.baixada) porData[d].ja++;
+    });
+    const datas = Object.keys(porData).sort().reverse();
+
+    const p = el('div', 'cartao painel-baixar');
+    p.appendChild(el('h3', null, 'Baixar fotos'));
+    p.appendChild(el('div', 'suave', fotos.length + ' foto(s) no total · ' + naoBaixadas.length + ' ainda não baixada(s) · ' + datas.length + ' dia(s) com fotos'));
+    const nome = 'mod-' + l.loteId;
+    const opcao = function (valor, texto, desab) {
+      const lab = el('label', 'opcao');
+      const r = el('input'); r.type = 'radio'; r.name = nome; r.value = valor; r.disabled = !!desab;
+      lab.appendChild(r); lab.appendChild(document.createTextNode(' ' + texto));
+      p.appendChild(lab); return r;
+    };
+    const rNovas = opcao('novas', 'Só as que ainda não foram baixadas (' + naoBaixadas.length + ')', !naoBaixadas.length);
+    const rData = opcao('data', 'Fotos de uma data:', !datas.length);
+    const sel = el('select', 'sel-data');
+    datas.forEach(function (d) {
+      const o = el('option', null, dataBR(d) + ' — ' + porData[d].total + ' foto(s)' + (porData[d].ja ? ' (' + porData[d].ja + ' já baixada(s))' : ''));
+      o.value = d; sel.appendChild(o);
+    });
+    p.appendChild(sel);
+    const rTodas = opcao('todas', 'Todas as fotos do pátio (' + fotos.length + ')', !fotos.length);
+    (naoBaixadas.length ? rNovas : rData).checked = true;
+
+    const aviso = el('div', 'aviso');
+    const bOk = el('button', 'btn verde', '');
+    p.appendChild(aviso); p.appendChild(bOk);
+    box.appendChild(p);
+
+    const escolha = function () {
+      const modo = rNovas.checked ? 'novas' : (rData.checked ? 'data' : 'todas');
+      let lista, rotulo, sufixo;
+      if (modo === 'novas') { lista = naoBaixadas; rotulo = 'ainda não baixada(s)'; sufixo = 'nao-baixadas_' + hojeArquivo(); }
+      else if (modo === 'data') { lista = fotos.filter(function (f) { return dataDaFoto(f) === sel.value; }); rotulo = 'de ' + dataBR(sel.value); sufixo = 'dia_' + sel.value; }
+      else { lista = fotos; rotulo = 'do pátio (todas)'; sufixo = 'todas_' + hojeArquivo(); }
+      return { lista: lista, rotulo: rotulo, sufixo: sufixo };
+    };
+    const atualizar = function () {
+      const e = escolha();
+      sel.disabled = !rData.checked;
+      const ja = e.lista.filter(function (f) { return f.baixada; }).length;
+      bOk.textContent = '⬇ Baixar ' + e.lista.length + ' foto(s) ' + e.rotulo;
+      bOk.disabled = !e.lista.length;
+      aviso.textContent = ja ? '⚠️ ' + ja + ' destas fotos já foram baixadas antes. Os nomes dos arquivos são os mesmos: extraindo na mesma pasta, elas são substituídas — não ficam duplicadas.' : '';
+    };
+    [rNovas, rData, rTodas, sel].forEach(function (x) { x.addEventListener('change', atualizar); });
+    atualizar();
+    bOk.addEventListener('click', function () { const e = escolha(); baixar(l, e.lista, e.sufixo, status, p); });
+  }
+
+  async function baixar(l, fotos, sufixo, status, painel) {
+    const botoes = painel.querySelectorAll('button, input, select');
     botoes.forEach(function (b) { b.disabled = true; });
     status.className = 'suave';
     try {
-      status.textContent = 'Buscando lista de fotos…';
-      const fotos = await api('listarFotos', { loteId: l.loteId, somenteNaoBaixadas: somenteNovas });
-      if (!fotos.length) { status.textContent = 'Nenhuma foto nova.'; return; }
+      if (!fotos.length) { status.textContent = 'Nenhuma foto para baixar.'; return; }
       const zip = new JSZip();
       for (let i = 0; i < fotos.length; i += POR_VEZ) {
         const parte = fotos.slice(i, i + POR_VEZ);
@@ -182,13 +245,13 @@
         r.forEach(function (x) { porId[x.fileId] = x.base64; });
         parte.forEach(function (f) { zip.file(caminhoSeguro(f.caminho), porId[f.fileId], { base64: true, binary: true }); });
       }
-      // planilha-resumo do lote
+      // planilha-resumo do pátio
       status.textContent = 'Montando resumo…';
       const vs = await api('veiculosLote', { loteId: l.loteId });
       zip.file(nomeSeguro(l.patio) + '/resumo_' + nomeSeguro(l.patio) + (l.numeroLote ? '_lista' + nomeSeguro(l.numeroLote) : '') + '.csv', csvResumo(vs));
       status.textContent = 'Gerando o .zip…';
       const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
-      const nome = 'FOTOS_' + nomeSeguro(l.patio) + (l.numeroLote ? '_lista' + nomeSeguro(l.numeroLote) : '') + '_' + hojeArquivo() + (somenteNovas ? '_novas' : '_todas') + '.zip';
+      const nome = 'FOTOS_' + nomeSeguro(l.patio) + (l.numeroLote ? '_lista' + nomeSeguro(l.numeroLote) : '') + '_' + sufixo + '.zip';
       const a = el('a'); a.href = URL.createObjectURL(blob); a.download = nome;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
@@ -199,7 +262,6 @@
     } catch (e) {
       status.className = 'erro';
       status.textContent = 'Falhou: ' + e.message + ' Nada foi marcado como baixado — pode tentar de novo.';
-    } finally {
       botoes.forEach(function (b) { b.disabled = false; });
     }
   }
