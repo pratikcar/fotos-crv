@@ -2,7 +2,7 @@
 const CACHE = 'fotos-patio-v1.0.1';
 const ARQUIVOS = [
   './', './index.html', './campo.js', './style.css', './config.js', './sync-core.js',
-  './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'
+  './manifest.webmanifest', './icon-192.png', './icon-512.png'
 ];
 
 importScripts('./config.js', './sync-core.js');
