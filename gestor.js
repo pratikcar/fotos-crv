@@ -73,172 +73,227 @@
     if (id === 'abaUsuarios') carregarUsuarios();
   }
 
-  // ---------- lotes ----------
-  $('btnRecarregar').addEventListener('click', carregarLotes);
+  // ---------- pátios (3 colunas: pátios | veículos | fotos) ----------
+  $('btnRecarregar').addEventListener('click', function () { carregarLotes(); });
+  st.loteSel = null; st.lotes = [];
+  const norm = function (t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+  function vazio(box, texto) { box.textContent = ''; box.appendChild(el('p', 'vazio', texto)); }
+
   async function carregarLotes() {
     const box = $('listaLotes');
-    box.textContent = '';
-    box.appendChild(el('p', 'suave', 'Carregando…'));
+    if (!st.lotes.length) vazio(box, 'Carregando…');
     let lotes;
     try { lotes = await api('listarLotes', { incluirEncerrados: true }); }
     catch (e) { box.textContent = ''; box.appendChild(el('p', 'erro', e.message)); return; }
-    box.textContent = '';
-    if (!lotes.length) { box.appendChild(el('p', 'suave', 'Nenhum pátio ainda. Use "+ Novo pátio" para enviar a planilha.')); return; }
-    lotes.slice().sort(function (a, b) { return (b.ativo ? 1 : 0) - (a.ativo ? 1 : 0); })
-      .forEach(function (l) { box.appendChild(cartaoLote(l)); });
+    st.lotes = lotes;
+    desenharPatios();
+    const l = lotes.find(function (x) { return x.loteId === st.loteSel; });
+    if (l) abrirPatio(l, true);
+    else { st.loteSel = null; vazio($('colLista'), 'Escolha um pátio à esquerda para ver os veículos e as fotos.'); vazio($('colDetalhe'), 'As fotos do veículo aparecem aqui.'); }
   }
 
-  function cartaoLote(l) {
-    const c = el('div', 'cartao');
-    const t = el('h3', null, l.patio + (l.numeroLote ? ' · lista ' + l.numeroLote : '') + ' ');
-    t.appendChild(el('span', 'tag ' + (l.ativo ? 'verde' : ''), l.ativo ? 'ativo' : 'encerrado'));
-    t.className = 'titulo-patio'; t.title = 'Ver a lista de veículos';
-    c.appendChild(t);
-    c.appendChild(el('div', 'suave', 'Criado em ' + data(l.criadoEm) + (l.arquivo ? ' · ' + l.arquivo : '')));
-    const nums = el('div', 'resumo-num');
-    [[l.fotografados + ' / ' + l.destinaveis, 'fotografados'], [l.total - l.destinaveis, 'não destinar'], [l.fotos, 'fotos'],
-      [l.naoBaixadas, 'fotos ainda não baixadas'], [l.foraDaLista, 'fora da lista']].forEach(function (n) {
-      const d = el('div'); d.appendChild(el('b', null, String(n[0]))); d.appendChild(document.createTextNode(n[1])); nums.appendChild(d);
+  function desenharPatios() {
+    const box = $('listaLotes'); box.textContent = '';
+    if (!st.lotes.length) { vazio(box, 'Nenhum pátio ainda. Use "+ Novo pátio" para enviar a planilha.'); return; }
+    const ordem = st.lotes.slice().sort(function (a, b) { return (b.ativo ? 1 : 0) - (a.ativo ? 1 : 0); });
+    let titEncerrados = false;
+    ordem.forEach(function (l) {
+      if (!l.ativo && !titEncerrados) { box.appendChild(el('div', 'col-sub', 'Encerrados')); titEncerrados = true; }
+      const b = el('button', 'patio-item' + (l.ativo ? '' : ' encerrado') + (l.loteId === st.loteSel ? ' sel' : ''));
+      b.dataset.lote = l.loteId;
+      b.appendChild(el('div', 'nome', l.patio));
+      b.appendChild(el('div', 'info', (l.numeroLote ? 'Lista ' + l.numeroLote + ' · ' : '') + (l.ativo ? l.fotografados + ' de ' + l.destinaveis : 'encerrado')));
+      if (l.ativo) {
+        const barra = el('div', 'barra'); const p = el('div');
+        p.style.width = (l.destinaveis ? Math.round(100 * l.fotografados / l.destinaveis) : 0) + '%';
+        barra.appendChild(p); b.appendChild(barra);
+      }
+      if (l.naoBaixadas) b.appendChild(el('span', 'tag azul', l.naoBaixadas + ' nova(s)'));
+      b.addEventListener('click', function () { abrirPatio(l, false); });
+      box.appendChild(b);
     });
-    c.appendChild(nums);
-    const barra = el('div', 'barra'); const p = el('div'); p.style.width = (l.destinaveis ? Math.round(100 * l.fotografados / l.destinaveis) : 0) + '%';
-    barra.appendChild(p); c.appendChild(barra);
-    const status = el('div', 'suave');
-    const btns = el('div', 'linha-btns');
-    const detalhe = el('div');
-    const bBaixar = el('button', 'btn pequeno verde', '⬇ Baixar fotos' + (l.naoBaixadas ? ' (' + l.naoBaixadas + ' ainda não baixadas)' : ''));
-    bBaixar.disabled = !l.fotos;
-    bBaixar.addEventListener('click', function () { painelBaixar(l, detalhe, status); });
-    const bIds = el('button', 'btn pequeno cinza', '📋 Lista de veículos');
-    bIds.addEventListener('click', function () { verIds(l, detalhe); });
-    t.addEventListener('click', function () { verIds(l, detalhe); });
-    const bAtivo = el('button', 'btn pequeno ' + (l.ativo ? 'vermelho' : 'cinza'), l.ativo ? 'Encerrar pátio' : 'Reabrir pátio');
-    bAtivo.addEventListener('click', async function () {
-      if (l.ativo && !confirm('Encerrar o pátio ' + l.patio + (l.numeroLote ? ' (lista ' + l.numeroLote + ')' : '') + '? Ele some do app de campo. Fotos já guardadas no celular ainda serão enviadas.')) return;
-      try { await api('definirAtivo', { loteId: l.loteId, ativo: !l.ativo }); carregarLotes(); } catch (e) { alert(e.message); }
-    });
-    const bEditar = el('button', 'btn pequeno cinza', '✏️ Editar');
-    bEditar.addEventListener('click', function () { painelEditar(l, detalhe); });
-    [bBaixar, bIds, bEditar, bAtivo].forEach(function (b) { btns.appendChild(b); });
-    if (!l.ativo) {
-      const bExcluir = el('button', 'btn pequeno vermelho', '🗑 Excluir');
-      bExcluir.addEventListener('click', function () { painelExcluir(l, detalhe); });
-      btns.appendChild(bExcluir);
-    }
-    c.appendChild(btns); c.appendChild(status); c.appendChild(detalhe);
-    return c;
   }
 
-  async function verIds(l, box) {
-    if (box.dataset.painel === 'ids') { box.textContent = ''; box.dataset.painel = ''; return; }
-    box.textContent = ''; box.dataset.painel = 'ids';
-    box.appendChild(el('p', 'suave', 'Carregando…'));
+  function situacao(v) {
+    if (v.naoDestinar) return 'bloq';
+    if (v.refazer) return 'refazer';
+    if (v.foraDaLista) return 'fora';
+    return v.status === 'fotografado' ? 'fotografado' : 'pendente';
+  }
+  const ROTULO = { bloq: ['vermelho', 'NÃO DESTINAR'], refazer: ['amarelo', '⚠️ refazer'], fora: ['amarelo', 'fora da lista'], fotografado: ['verde', 'fotografado'], pendente: ['', 'pendente'] };
+
+  async function abrirPatio(l, recarga) {
+    const mudou = st.loteSel !== l.loteId;
+    st.loteSel = l.loteId;
+    document.querySelectorAll('#listaLotes .patio-item').forEach(function (b) { b.classList.toggle('sel', b.dataset.lote === l.loteId); });
+    const col = $('colLista');
+    const filtroAntes = !mudou && st.filtro, buscaAntes = !mudou && st.busca, nroAntes = !mudou && st.nroSel;
+    if (mudou) { st.filtro = null; st.busca = ''; st.nroSel = null; vazio($('colDetalhe'), 'Toque em um NRO para ver as fotos.'); }
+    if (!recarga) vazio(col, 'Carregando…');
     let vs, fotos;
     try {
       vs = await api('veiculosLote', { loteId: l.loteId });
       fotos = await api('listarFotos', { loteId: l.loteId, somenteNaoBaixadas: false });
-    } catch (e) { box.textContent = ''; box.appendChild(el('p', 'erro', e.message)); return; }
-    box.textContent = '';
+    } catch (e) { col.textContent = ''; col.appendChild(el('p', 'erro', e.message)); return; }
+    if (st.loteSel !== l.loteId) return;
+    col.textContent = '';
     const fotosPorNro = {};
     fotos.forEach(function (f) { const nro = String(f.caminho).split('/')[3]; (fotosPorNro[nro] = fotosPorNro[nro] || []).push(f); });
-    const sit = function (v) {
-      if (v.naoDestinar) return 'bloq';
-      if (v.refazer) return 'refazer';
-      if (v.foraDaLista) return 'fora';
-      return v.status === 'fotografado' ? 'fotografado' : 'pendente';
-    };
-    const FILTROS = [['pendente', 'Pendentes'], ['fotografado', 'Fotografados'], ['refazer', 'Refazer'], ['fora', 'Fora da lista'], ['bloq', 'Não destinar'], ['todos', 'Todos']];
+
+    // cabeçalho do pátio com as ações (só aparecem depois de escolher o pátio)
+    const cab = el('div', 'patio-cab');
+    const h = el('h2', null, l.patio + ' ');
+    h.appendChild(el('span', 'tag ' + (l.ativo ? 'verde' : ''), l.ativo ? 'ativo' : 'encerrado'));
+    cab.appendChild(h);
+    cab.appendChild(el('div', 'suave', (l.numeroLote ? 'Lista ' + l.numeroLote + ' · ' : '') + 'criado em ' + data(l.criadoEm) + ' · ' + l.fotos + ' foto(s)' + (l.foraDaLista ? ' · ' + l.foraDaLista + ' fora da lista' : '')));
+    const btns = el('div', 'linha-btns');
+    const status = el('div', 'suave status-patio');
+    const det = $('colDetalhe');
+    const bBaixar = el('button', 'btn pequeno verde', '⬇ Baixar fotos' + (l.naoBaixadas ? ' (' + l.naoBaixadas + ' novas)' : ''));
+    bBaixar.disabled = !l.fotos;
+    bBaixar.addEventListener('click', function () { marcarNro(null); painelBaixar(l, det, status); });
+    const bEditar = el('button', 'btn pequeno cinza', '✏️ Editar');
+    bEditar.addEventListener('click', function () { marcarNro(null); painelEditar(l, det); });
+    const bAtivo = el('button', 'btn pequeno ' + (l.ativo ? 'vermelho' : 'cinza'), l.ativo ? 'Encerrar' : 'Reabrir');
+    bAtivo.addEventListener('click', async function () {
+      if (l.ativo && !confirm('Encerrar o pátio ' + l.patio + (l.numeroLote ? ' (lista ' + l.numeroLote + ')' : '') + '? Ele some do app de campo. Fotos já guardadas no celular ainda serão enviadas.')) return;
+      try { await api('definirAtivo', { loteId: l.loteId, ativo: !l.ativo }); carregarLotes(); } catch (e) { alert(e.message); }
+    });
+    [bBaixar, bEditar, bAtivo].forEach(function (b) { btns.appendChild(b); });
+    if (!l.ativo) {
+      const bExcluir = el('button', 'btn pequeno vermelho', '🗑 Excluir');
+      bExcluir.addEventListener('click', function () { marcarNro(null); painelExcluir(l, det); });
+      btns.appendChild(bExcluir);
+    }
+    cab.appendChild(btns); cab.appendChild(status);
+    col.appendChild(cab);
+
+    // filtros + busca
     const cont = { todos: vs.length };
-    vs.forEach(function (v) { const k = sit(v); cont[k] = (cont[k] || 0) + 1; });
-    let filtro = 'pendente';
+    vs.forEach(function (v) { const k = situacao(v); cont[k] = (cont[k] || 0) + 1; });
+    st.filtro = filtroAntes || (cont.fotografado ? 'fotografado' : 'pendente');
+    const FILTROS = [['pendente', 'Pendentes'], ['fotografado', 'Fotografados'], ['refazer', 'Refazer'], ['fora', 'Fora da lista'], ['bloq', 'Não destinar'], ['todos', 'Todos']];
     const barra = el('div', 'filtros filtros-gestao');
-    const busca = el('input'); busca.type = 'search'; busca.placeholder = 'Buscar NRO, placa ou modelo';
-    const wrap = el('div', 'rolagem'); const tab = el('table'); wrap.appendChild(tab);
+    const opcional = function (f) { return f !== 'todos' && f !== 'pendente' && f !== 'fotografado'; };
     FILTROS.forEach(function (fo) {
-      if (fo[0] !== 'todos' && fo[0] !== 'pendente' && fo[0] !== 'fotografado' && !cont[fo[0]]) return;
-      const b = el('button', fo[0] === filtro ? 'ativo' : '', fo[1] + ' (' + (cont[fo[0]] || 0) + ')');
-      b.addEventListener('click', function () { filtro = fo[0]; barra.querySelectorAll('button').forEach(function (x) { x.classList.toggle('ativo', x === b); }); desenhar(); });
+      const b = el('button', fo[0] === st.filtro ? 'ativo' : '', fo[1] + ' ' + (cont[fo[0]] || 0));
+      if (opcional(fo[0]) && !cont[fo[0]]) b.classList.add('oculto');
+      b.dataset.filtro = fo[0];
+      b.addEventListener('click', function () { st.filtro = fo[0]; barra.querySelectorAll('button').forEach(function (x) { x.classList.toggle('ativo', x === b); }); desenhar(); });
       barra.appendChild(b);
     });
-    box.appendChild(barra); box.appendChild(busca); box.appendChild(wrap);
-    const norm = function (t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); };
+    const busca = el('input'); busca.type = 'search'; busca.placeholder = 'Buscar NRO, placa ou modelo'; busca.value = buscaAntes || '';
+    busca.addEventListener('input', function () { st.busca = busca.value; desenhar(); });
+    col.appendChild(barra); col.appendChild(busca);
+    const lista = el('div', 'lista-nros'); col.appendChild(lista);
 
-    const desenhar = function () {
-      tab.textContent = '';
-      const cab = el('tr');
-      ['NRO', 'Categoria', 'Placa', 'Modelo', 'Cor', 'Situação', 'Fotos'].forEach(function (h) { cab.appendChild(el('th', null, h)); });
-      tab.appendChild(cab);
+    function marcarNro(nro) {
+      st.nroSel = nro;
+      lista.querySelectorAll('.item').forEach(function (x) { x.classList.toggle('sel', x.dataset.nro === nro); });
+    }
+
+    function desenhar() {
+      lista.textContent = '';
       const q = norm(busca.value.trim());
+      let n = 0;
       vs.slice().sort(function (a, b) { return Number(a.nro) - Number(b.nro); }).forEach(function (v) {
-        const k = sit(v);
-        if (filtro !== 'todos' && k !== filtro) return;
+        const k = situacao(v);
+        if (st.filtro !== 'todos' && k !== st.filtro) return;
         if (q && norm(v.nro + ' ' + v.placa + ' ' + v.modelo + ' ' + v.cor).indexOf(q) < 0) return;
-        const tr = el('tr', (fotosPorNro[v.nro] || []).length ? 'linha-clicavel' : '');
-        [v.nro, v.categoria, v.placa, v.modelo, v.cor].forEach(function (x) { tr.appendChild(el('td', null, x || '—')); });
-        const td = el('td');
-        const rot = { bloq: ['vermelho', 'NÃO DESTINAR'], refazer: ['amarelo', '⚠️ refazer'], fora: ['amarelo', 'fora da lista'], fotografado: ['verde', 'fotografado'], pendente: ['', 'pendente'] }[k];
-        td.appendChild(el('span', 'tag ' + rot[0], rot[1])); tr.appendChild(td);
+        n++;
         const nf = (fotosPorNro[v.nro] || []).length;
-        tr.appendChild(el('td', null, nf ? '🖼 ' + nf + (v.apagadasCampo ? ' (' + v.apagadasCampo + ' apagada(s) pelo campo)' : '') : '0'));
-        tab.appendChild(tr);
-        if (nf) tr.addEventListener('click', function () { abrirFotos(tr, v); });
+        const b = el('button', 'item ' + (k === 'fotografado' ? 'feito' : k === 'bloq' ? 'bloq' : k === 'refazer' ? 'local' : '') + (v.nro === st.nroSel ? ' sel' : ''));
+        b.dataset.nro = v.nro;
+        b.appendChild(el('div', 'nro', v.nro));
+        const d = el('div', 'desc');
+        d.appendChild(el('div', 'placa', v.placa || (v.foraDaLista ? 'Fora da lista' : 'Sem placa')));
+        d.appendChild(el('div', 'mod', [v.modelo, v.cor, v.categoria].filter(Boolean).join(' · ') || '—'));
+        b.appendChild(d);
+        b.appendChild(el('div', 'st', k === 'fotografado' || nf ? '🖼 ' + nf : (k === 'refazer' ? '⚠️ refazer' : (k === 'bloq' ? '⛔' : ''))));
+        b.addEventListener('click', function () { marcarNro(v.nro); abrirVeiculo(l, v, fotosPorNro, desenharTudo); });
+        lista.appendChild(b);
       });
-    };
-
-    const abrirFotos = function (tr, v) {
-      const prox = tr.nextSibling;
-      if (prox && prox.classList && prox.classList.contains('linha-fotos')) { prox.remove(); return; }
-      const linha = el('tr', 'linha-fotos'); const td = el('td'); td.colSpan = 7; linha.appendChild(td);
-      const gal = el('div', 'galeria galeria-gestao'); td.appendChild(gal);
-      tr.after(linha);
-      (fotosPorNro[v.nro] || []).forEach(function (f) {
-        const c = el('div', 'foto-cartao');
-        const img = el('img'); img.alt = f.caminho;
-        img.addEventListener('click', function () {
-          api('miniatura', { uuid: f.uuid, grande: true }).then(function (m) { ampliar('data:' + m.tipo + ';base64,' + m.base64); }).catch(function (e) { alert(e.message); });
-        });
-        c.appendChild(img);
-        const nome = String(f.caminho).split('/').pop();
-        c.appendChild(el('div', 'suave', nome + (f.baixada ? ' · já baixada' : '')));
-        const b = el('button', 'btn pequeno vermelho', '🗑 Excluir (foto ruim)');
-        b.addEventListener('click', async function (ev) {
-          ev.stopPropagation();
-          if (!confirm('Excluir a foto ' + nome + ' do NRO ' + v.nro + '?\n\nEla vai para a lixeira do Drive (30 dias) e o NRO volta a ficar PENDENTE para o campo tirar foto nova.')) return;
-          b.disabled = true;
-          try {
-            await api('excluirFotoGestao', { uuid: f.uuid });
-            fotosPorNro[v.nro] = fotosPorNro[v.nro].filter(function (x) { return x.uuid !== f.uuid; });
-            v.refazer = true;
-            desenhar();
-          } catch (e) { alert(e.message); b.disabled = false; }
-        });
-        c.appendChild(b);
-        gal.appendChild(c);
-        api('miniatura', { uuid: f.uuid }).then(function (m) { img.src = 'data:' + m.tipo + ';base64,' + m.base64; }).catch(function () { img.alt = 'não carregou'; });
+      if (!n) lista.appendChild(el('p', 'vazio', 'Nenhum veículo neste filtro.'));
+    }
+    function desenharTudo() { // após excluir foto: recontar filtros e redesenhar
+      const novo = { todos: vs.length };
+      vs.forEach(function (v) { const k = situacao(v); novo[k] = (novo[k] || 0) + 1; });
+      barra.querySelectorAll('button').forEach(function (b) {
+        const f = b.dataset.filtro;
+        b.textContent = b.textContent.replace(/\s\d+$/, '') + ' ' + (novo[f] || 0);
+        b.classList.toggle('oculto', opcional(f) && !novo[f] && st.filtro !== f);
       });
-    };
-
-    busca.addEventListener('input', desenhar);
+      desenhar();
+    }
     desenhar();
+    if (nroAntes) {
+      const v = vs.find(function (x) { return x.nro === nroAntes; });
+      if (v && det.dataset.painel === 'veiculo') abrirVeiculo(l, v, fotosPorNro, desenharTudo);
+    }
   }
+
+  function abrirVeiculo(l, v, fotosPorNro, aoMudar) {
+    const box = $('colDetalhe');
+    box.textContent = ''; box.dataset.painel = 'veiculo';
+    const k = situacao(v);
+    const cab = el('div', 'veiculo-cab');
+    const t = el('h2', null, 'NRO ' + v.nro + ' ');
+    t.appendChild(el('span', 'tag ' + ROTULO[k][0], ROTULO[k][1]));
+    cab.appendChild(t);
+    cab.appendChild(el('div', 'placa-grande', v.placa || (v.foraDaLista ? 'Fora da lista' : 'Sem placa')));
+    cab.appendChild(el('div', 'suave', [v.modelo, v.cor, v.categoria, v.chassi ? 'chassi ' + v.chassi : ''].filter(Boolean).join(' · ')));
+    if (v.apagadasCampo) cab.appendChild(el('div', 'suave', v.apagadasCampo + ' foto(s) apagada(s) pelo campo — vão no .zip marcadas como _APAGADA-PELO-CAMPO'));
+    box.appendChild(cab);
+    const fs = fotosPorNro[v.nro] || [];
+    if (!fs.length) { box.appendChild(el('p', 'vazio', k === 'bloq' ? 'Veículo NÃO DESTINAR — não é fotografado.' : 'Nenhuma foto deste NRO ainda.')); return; }
+    const gal = el('div', 'galeria galeria-gestao'); box.appendChild(gal);
+    fs.forEach(function (f) {
+      const c = el('div', 'foto-cartao');
+      const img = el('img'); img.alt = 'Foto ' + String(f.caminho).split('/').pop(); img.title = 'Clique para ampliar';
+      img.addEventListener('click', function () {
+        api('miniatura', { uuid: f.uuid, grande: true }).then(function (m) { ampliar('data:' + m.tipo + ';base64,' + m.base64); }).catch(function (e) { alert(e.message); });
+      });
+      c.appendChild(img);
+      const nome = String(f.caminho).split('/').pop();
+      c.appendChild(el('div', 'suave', nome + (f.baixada ? ' · já baixada' : ' · nova')));
+      const b = el('button', 'btn pequeno vermelho', '🗑 Excluir (pedir refazer)');
+      b.addEventListener('click', async function () {
+        if (!confirm('Excluir a foto ' + nome + ' do NRO ' + v.nro + '?\n\nEla vai para a lixeira do Drive (30 dias) e o NRO volta a ficar PENDENTE para o campo tirar foto nova.')) return;
+        b.disabled = true;
+        try {
+          await api('excluirFotoGestao', { uuid: f.uuid });
+          fotosPorNro[v.nro] = fotosPorNro[v.nro].filter(function (x) { return x.uuid !== f.uuid; });
+          v.refazer = true;
+          aoMudar();
+          abrirVeiculo(l, v, fotosPorNro, aoMudar);
+        } catch (e) { alert(e.message); b.disabled = false; }
+      });
+      c.appendChild(b);
+      gal.appendChild(c);
+      const cache = st.minis[f.uuid];
+      if (cache) img.src = cache;
+      else api('miniatura', { uuid: f.uuid }).then(function (m) { img.src = st.minis[f.uuid] = 'data:' + m.tipo + ';base64,' + m.base64; }).catch(function () { img.alt = 'não carregou'; });
+    });
+  }
+  st.minis = {};
 
   function ampliar(src) {
     const fundo = el('div', 'modal-fundo');
     const img = el('img', 'foto-grande'); img.src = src; img.alt = 'Foto ampliada';
     fundo.appendChild(img);
     fundo.addEventListener('click', function () { fundo.remove(); });
+    document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { fundo.remove(); document.removeEventListener('keydown', esc); } });
     document.body.appendChild(fundo);
   }
 
   // ---------- editar / excluir pátio ----------
   function abrirPainel(box, nome) {
-    if (box.dataset.painel === nome) { box.textContent = ''; box.dataset.painel = ''; return false; }
     box.textContent = ''; box.dataset.painel = nome; return true;
   }
 
   function painelEditar(l, box) {
     if (!abrirPainel(box, 'editar')) return;
-    const p = el('div', 'cartao painel-baixar');
+    const p = el('div', 'painel-baixar');
     p.appendChild(el('h3', null, 'Editar pátio'));
     p.appendChild(el('label', null, 'Nome do pátio CRV'));
     const iPatio = el('input'); iPatio.type = 'text'; iPatio.maxLength = 60; iPatio.value = l.patio; p.appendChild(iPatio);
@@ -263,7 +318,7 @@
 
   function painelExcluir(l, box) {
     if (!abrirPainel(box, 'excluir')) return;
-    const p = el('div', 'cartao painel-baixar painel-perigo');
+    const p = el('div', 'painel-baixar painel-perigo');
     p.appendChild(el('h3', 'erro', '🗑 Excluir o pátio ' + l.patio));
     p.appendChild(el('p', null, 'Isto remove o pátio, a lista de ' + l.total + ' veículos e as ' + l.fotos + ' foto(s) dele. As fotos vão para a lixeira do Google Drive e podem ser recuperadas por 30 dias.'));
     if (l.naoBaixadas) p.appendChild(el('p', 'aviso', '⚠️ ' + l.naoBaixadas + ' foto(s) deste pátio ainda NÃO foram baixadas. Baixe antes de excluir se precisar delas.'));
@@ -305,7 +360,7 @@
     });
     const datas = Object.keys(porData).sort().reverse();
 
-    const p = el('div', 'cartao painel-baixar');
+    const p = el('div', 'painel-baixar');
     p.appendChild(el('h3', null, 'Baixar fotos'));
     p.appendChild(el('div', 'suave', fotos.length + ' foto(s) no total · ' + naoBaixadas.length + ' ainda não baixada(s) · ' + datas.length + ' dia(s) com fotos'));
     const nome = 'mod-' + l.loteId;

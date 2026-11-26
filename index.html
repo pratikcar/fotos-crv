@@ -35,6 +35,7 @@
     </div>
   </section>
 
+  <div class="area-campo" id="areaCampo">
   <!-- PÁTIOS -->
   <section id="telaPatios" class="oculto">
     <div class="titulo-secao">Pátios ativos</div>
@@ -42,19 +43,15 @@
     <p class="suave" id="atualizadoEm"></p>
   </section>
 
-  <!-- CATEGORIAS -->
-  <section id="telaCategorias" class="oculto">
-    <div class="titulo-secao">O que vai fotografar?</div>
-    <div class="grade" id="listaCategorias"></div>
-  </section>
-
-  <!-- LISTA DE IDS -->
+  <!-- LISTA DE NROS (categorias e filtros no topo) -->
   <section id="telaLista" class="oculto">
     <div class="busca">
+      <div class="chips-cat" id="chipsCat"></div>
       <input type="search" id="busca" placeholder="Buscar NRO, placa ou modelo" autocomplete="off">
-      <div class="filtros">
+      <div class="filtros" id="filtros">
         <button data-filtro="pendentes" class="ativo">Pendentes</button>
         <button data-filtro="feitos">Fotografados</button>
+        <button data-filtro="refazer">Refazer</button>
         <button data-filtro="todos">Todos</button>
       </div>
     </div>
@@ -62,15 +59,21 @@
     <button class="btn cinza" id="btnManual">Digitar NRO fora da lista</button>
   </section>
 
-  <!-- GALERIA DO NRO -->
-  <section id="telaGaleria" class="oculto">
-    <div id="galeriaAviso" class="suave"></div>
-    <div class="titulo-secao oculto" id="tituloLocais">No celular (aguardando envio)</div>
-    <div class="galeria" id="galeriaLocais"></div>
-    <div class="titulo-secao oculto" id="tituloEnviadas">Enviadas</div>
-    <div class="galeria" id="galeriaEnviadas"></div>
-    <p class="suave">"Apagar" tira a foto só da sua tela. Ela continua indo para a gestão. Fotos já baixadas pela gestão não podem ser apagadas.</p>
+  <!-- VEÍCULO: dados, fotos tiradas e câmera -->
+  <section id="telaVeiculo" class="oculto">
+    <div id="veiculoVazio" class="vazio oculto">Toque em um NRO para ver as fotos e fotografar.</div>
+    <div id="veiculoConteudo">
+      <div class="veiculo-topo" id="veiculoTopo"></div>
+      <div id="galeriaAviso" class="suave"></div>
+      <div class="titulo-secao oculto" id="tituloLocais">No celular (aguardando envio)</div>
+      <div class="galeria" id="galeriaLocais"></div>
+      <div class="titulo-secao oculto" id="tituloEnviadas">Enviadas</div>
+      <div class="galeria" id="galeriaEnviadas"></div>
+      <p class="suave">"Apagar" tira a foto só da sua tela. Ela continua indo para a gestão. Fotos já baixadas pela gestão não podem ser apagadas.</p>
+      <div class="acao-veiculo"><button class="btn verde" id="btnTirarFotos">📷 Tirar fotos</button></div>
+    </div>
   </section>
+  </div>
 
   <!-- FILA DE ENVIO -->
   <section id="telaFila" class="oculto">
@@ -81,14 +84,6 @@
     <div id="filaItens"></div>
   </section>
 </main>
-
-<div class="rodape-fixo oculto" id="rodapeFoto">
-  <div class="detalhe" id="rodapeDetalhe"></div>
-  <div class="linha-rodape">
-    <button class="btn cinza oculto" id="btnVerFotos">🖼 Ver fotos</button>
-    <button class="btn verde" id="btnTirarFotos" disabled>📷 Tirar fotos</button>
-  </div>
-</div>
 
 <!-- CÂMERA -->
 <div class="camera oculto" id="camera">
