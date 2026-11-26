@@ -134,8 +134,8 @@
   /** Tenta tirar lote e pátio do nome do arquivo: ..._DESTINACAO_3910_IVOTI_... */
   function infoDoNome(nome) {
     const base = String(nome || '').replace(/\.[^.]+$/, '');
-    let m = /DESTINA[CÇ][AÃ]O_(\d{2,7})_([^_]+)/i.exec(base);
-    if (!m) m = /_(\d{3,5})_([A-Za-zÀ-ú ]{3,})(?:_|$)/.exec(base);
+    let m = /DESTINA[CÇ][AÃ]O[_\s-]+(\d{2,7})[_\s-]+([A-Za-zÀ-ú]+(?:\s(?!PRATIK)[A-Za-zÀ-ú]+)*)/i.exec(base);
+    if (!m) m = /[_\s](\d{3,5})[_\s]+([A-Za-zÀ-ú]{3,})/.exec(base);
     return m ? { numeroLote: m[1], patio: m[2].replace(/-/g, ' ').toUpperCase() } : { numeroLote: '', patio: '' };
   }
 
