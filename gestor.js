@@ -84,13 +84,15 @@
     catch (e) { box.textContent = ''; box.appendChild(el('p', 'erro', e.message)); return; }
     box.textContent = '';
     if (!lotes.length) { box.appendChild(el('p', 'suave', 'Nenhum pátio ainda. Use "+ Novo pátio" para enviar a planilha.')); return; }
-    lotes.forEach(function (l) { box.appendChild(cartaoLote(l)); });
+    lotes.slice().sort(function (a, b) { return (b.ativo ? 1 : 0) - (a.ativo ? 1 : 0); })
+      .forEach(function (l) { box.appendChild(cartaoLote(l)); });
   }
 
   function cartaoLote(l) {
     const c = el('div', 'cartao');
     const t = el('h3', null, l.patio + (l.numeroLote ? ' · lista ' + l.numeroLote : '') + ' ');
     t.appendChild(el('span', 'tag ' + (l.ativo ? 'verde' : ''), l.ativo ? 'ativo' : 'encerrado'));
+    t.className = 'titulo-patio'; t.title = 'Ver a lista de veículos';
     c.appendChild(t);
     c.appendChild(el('div', 'suave', 'Criado em ' + data(l.criadoEm) + (l.arquivo ? ' · ' + l.arquivo : '')));
     const nums = el('div', 'resumo-num');
@@ -107,8 +109,9 @@
     const bBaixar = el('button', 'btn pequeno verde', '⬇ Baixar fotos' + (l.naoBaixadas ? ' (' + l.naoBaixadas + ' ainda não baixadas)' : ''));
     bBaixar.disabled = !l.fotos;
     bBaixar.addEventListener('click', function () { painelBaixar(l, detalhe, status); });
-    const bIds = el('button', 'btn pequeno cinza', 'Ver IDs');
+    const bIds = el('button', 'btn pequeno cinza', '📋 Lista de veículos');
     bIds.addEventListener('click', function () { verIds(l, detalhe); });
+    t.addEventListener('click', function () { verIds(l, detalhe); });
     const bAtivo = el('button', 'btn pequeno ' + (l.ativo ? 'vermelho' : 'cinza'), l.ativo ? 'Encerrar pátio' : 'Reabrir pátio');
     bAtivo.addEventListener('click', async function () {
       if (l.ativo && !confirm('Encerrar o pátio ' + l.patio + (l.numeroLote ? ' (lista ' + l.numeroLote + ')' : '') + '? Ele some do app de campo. Fotos já guardadas no celular ainda serão enviadas.')) return;
@@ -117,7 +120,7 @@
     const bEditar = el('button', 'btn pequeno cinza', '✏️ Editar');
     bEditar.addEventListener('click', function () { painelEditar(l, detalhe); });
     [bBaixar, bIds, bEditar, bAtivo].forEach(function (b) { btns.appendChild(b); });
-    if (st.sessao && st.sessao.papel === 'admin') {
+    if (!l.ativo) {
       const bExcluir = el('button', 'btn pequeno vermelho', '🗑 Excluir');
       bExcluir.addEventListener('click', function () { painelExcluir(l, detalhe); });
       btns.appendChild(bExcluir);
@@ -130,39 +133,101 @@
     if (box.dataset.painel === 'ids') { box.textContent = ''; box.dataset.painel = ''; return; }
     box.textContent = ''; box.dataset.painel = 'ids';
     box.appendChild(el('p', 'suave', 'Carregando…'));
-    let vs;
-    try { vs = await api('veiculosLote', { loteId: l.loteId }); } catch (e) { box.textContent = ''; box.appendChild(el('p', 'erro', e.message)); return; }
+    let vs, fotos;
+    try {
+      vs = await api('veiculosLote', { loteId: l.loteId });
+      fotos = await api('listarFotos', { loteId: l.loteId, somenteNaoBaixadas: false });
+    } catch (e) { box.textContent = ''; box.appendChild(el('p', 'erro', e.message)); return; }
     box.textContent = '';
-    const filtro = el('select');
-    [['todos', 'Todos'], ['pendente', 'Pendentes'], ['fotografado', 'Fotografados'], ['bloq', 'Não destinar'], ['fora', 'Fora da lista']].forEach(function (o) {
-      const op = el('option', null, o[1]); op.value = o[0]; filtro.appendChild(op);
+    const fotosPorNro = {};
+    fotos.forEach(function (f) { const nro = String(f.caminho).split('/')[3]; (fotosPorNro[nro] = fotosPorNro[nro] || []).push(f); });
+    const sit = function (v) {
+      if (v.naoDestinar) return 'bloq';
+      if (v.refazer) return 'refazer';
+      if (v.foraDaLista) return 'fora';
+      return v.status === 'fotografado' ? 'fotografado' : 'pendente';
+    };
+    const FILTROS = [['pendente', 'Pendentes'], ['fotografado', 'Fotografados'], ['refazer', 'Refazer'], ['fora', 'Fora da lista'], ['bloq', 'Não destinar'], ['todos', 'Todos']];
+    const cont = { todos: vs.length };
+    vs.forEach(function (v) { const k = sit(v); cont[k] = (cont[k] || 0) + 1; });
+    let filtro = 'pendente';
+    const barra = el('div', 'filtros filtros-gestao');
+    const busca = el('input'); busca.type = 'search'; busca.placeholder = 'Buscar NRO, placa ou modelo';
+    const wrap = el('div', 'rolagem'); const tab = el('table'); wrap.appendChild(tab);
+    FILTROS.forEach(function (fo) {
+      if (fo[0] !== 'todos' && fo[0] !== 'pendente' && fo[0] !== 'fotografado' && !cont[fo[0]]) return;
+      const b = el('button', fo[0] === filtro ? 'ativo' : '', fo[1] + ' (' + (cont[fo[0]] || 0) + ')');
+      b.addEventListener('click', function () { filtro = fo[0]; barra.querySelectorAll('button').forEach(function (x) { x.classList.toggle('ativo', x === b); }); desenhar(); });
+      barra.appendChild(b);
     });
-    box.appendChild(filtro);
-    const wrap = el('div', 'rolagem'); const tab = el('table'); wrap.appendChild(tab); box.appendChild(wrap);
+    box.appendChild(barra); box.appendChild(busca); box.appendChild(wrap);
+    const norm = function (t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); };
+
     const desenhar = function () {
       tab.textContent = '';
       const cab = el('tr');
       ['NRO', 'Categoria', 'Placa', 'Modelo', 'Cor', 'Situação', 'Fotos'].forEach(function (h) { cab.appendChild(el('th', null, h)); });
       tab.appendChild(cab);
+      const q = norm(busca.value.trim());
       vs.slice().sort(function (a, b) { return Number(a.nro) - Number(b.nro); }).forEach(function (v) {
-        const f = filtro.value;
-        if (f === 'pendente' && (v.status !== 'pendente' || v.naoDestinar)) return;
-        if (f === 'fotografado' && v.status !== 'fotografado') return;
-        if (f === 'bloq' && !v.naoDestinar) return;
-        if (f === 'fora' && !v.foraDaLista) return;
-        const tr = el('tr');
+        const k = sit(v);
+        if (filtro !== 'todos' && k !== filtro) return;
+        if (q && norm(v.nro + ' ' + v.placa + ' ' + v.modelo + ' ' + v.cor).indexOf(q) < 0) return;
+        const tr = el('tr', (fotosPorNro[v.nro] || []).length ? 'linha-clicavel' : '');
         [v.nro, v.categoria, v.placa, v.modelo, v.cor].forEach(function (x) { tr.appendChild(el('td', null, x || '—')); });
         const td = el('td');
-        if (v.naoDestinar) td.appendChild(el('span', 'tag vermelho', 'NÃO DESTINAR'));
-        else if (v.foraDaLista) td.appendChild(el('span', 'tag amarelo', 'fora da lista'));
-        else td.appendChild(el('span', 'tag ' + (v.status === 'fotografado' ? 'verde' : ''), v.status));
-        tr.appendChild(td);
-        tr.appendChild(el('td', null, String(v.fotos)));
+        const rot = { bloq: ['vermelho', 'NÃO DESTINAR'], refazer: ['amarelo', '⚠️ refazer'], fora: ['amarelo', 'fora da lista'], fotografado: ['verde', 'fotografado'], pendente: ['', 'pendente'] }[k];
+        td.appendChild(el('span', 'tag ' + rot[0], rot[1])); tr.appendChild(td);
+        const nf = (fotosPorNro[v.nro] || []).length;
+        tr.appendChild(el('td', null, nf ? '🖼 ' + nf + (v.apagadasCampo ? ' (' + v.apagadasCampo + ' apagada(s) pelo campo)' : '') : '0'));
         tab.appendChild(tr);
+        if (nf) tr.addEventListener('click', function () { abrirFotos(tr, v); });
       });
     };
-    filtro.addEventListener('change', desenhar);
+
+    const abrirFotos = function (tr, v) {
+      const prox = tr.nextSibling;
+      if (prox && prox.classList && prox.classList.contains('linha-fotos')) { prox.remove(); return; }
+      const linha = el('tr', 'linha-fotos'); const td = el('td'); td.colSpan = 7; linha.appendChild(td);
+      const gal = el('div', 'galeria galeria-gestao'); td.appendChild(gal);
+      tr.after(linha);
+      (fotosPorNro[v.nro] || []).forEach(function (f) {
+        const c = el('div', 'foto-cartao');
+        const img = el('img'); img.alt = f.caminho;
+        img.addEventListener('click', function () {
+          api('miniatura', { uuid: f.uuid, grande: true }).then(function (m) { ampliar('data:' + m.tipo + ';base64,' + m.base64); }).catch(function (e) { alert(e.message); });
+        });
+        c.appendChild(img);
+        const nome = String(f.caminho).split('/').pop();
+        c.appendChild(el('div', 'suave', nome + (f.baixada ? ' · já baixada' : '')));
+        const b = el('button', 'btn pequeno vermelho', '🗑 Excluir (foto ruim)');
+        b.addEventListener('click', async function (ev) {
+          ev.stopPropagation();
+          if (!confirm('Excluir a foto ' + nome + ' do NRO ' + v.nro + '?\n\nEla vai para a lixeira do Drive (30 dias) e o NRO volta a ficar PENDENTE para o campo tirar foto nova.')) return;
+          b.disabled = true;
+          try {
+            await api('excluirFotoGestao', { uuid: f.uuid });
+            fotosPorNro[v.nro] = fotosPorNro[v.nro].filter(function (x) { return x.uuid !== f.uuid; });
+            v.refazer = true;
+            desenhar();
+          } catch (e) { alert(e.message); b.disabled = false; }
+        });
+        c.appendChild(b);
+        gal.appendChild(c);
+        api('miniatura', { uuid: f.uuid }).then(function (m) { img.src = 'data:' + m.tipo + ';base64,' + m.base64; }).catch(function () { img.alt = 'não carregou'; });
+      });
+    };
+
+    busca.addEventListener('input', desenhar);
     desenhar();
+  }
+
+  function ampliar(src) {
+    const fundo = el('div', 'modal-fundo');
+    const img = el('img', 'foto-grande'); img.src = src; img.alt = 'Foto ampliada';
+    fundo.appendChild(img);
+    fundo.addEventListener('click', function () { fundo.remove(); });
+    document.body.appendChild(fundo);
   }
 
   // ---------- editar / excluir pátio ----------
@@ -335,10 +400,10 @@
       if (/^[=+\-@]/.test(s)) s = "'" + s; // evita fórmula ao abrir no Excel
       return '"' + s.replace(/"/g, '""') + '"';
     };
-    const linhas = [['NRO', 'Categoria', 'Placa', 'UF', 'Modelo', 'Cor', 'Chassi', 'Situação', 'Fotos'].map(esc).join(';')];
+    const linhas = [['NRO', 'Categoria', 'Placa', 'UF', 'Modelo', 'Cor', 'Chassi', 'Situação', 'Fotos', 'Apagadas pelo campo'].map(esc).join(';')];
     vs.slice().sort(function (a, b) { return Number(a.nro) - Number(b.nro); }).forEach(function (v) {
-      const sit = v.naoDestinar ? 'NÃO DESTINAR' : (v.foraDaLista ? 'fora da lista' : v.status);
-      linhas.push([v.nro, v.categoria, v.placa, v.uf, v.modelo, v.cor, v.chassi, sit, v.fotos].map(esc).join(';'));
+      const sit = v.naoDestinar ? 'NÃO DESTINAR' : (v.refazer ? 'refazer' : (v.foraDaLista ? 'fora da lista' : v.status));
+      linhas.push([v.nro, v.categoria, v.placa, v.uf, v.modelo, v.cor, v.chassi, sit, v.fotos, v.apagadasCampo || 0].map(esc).join(';'));
     });
     return '﻿' + linhas.join('\r\n');
   }

@@ -123,3 +123,20 @@ th { color: var(--suave); font-weight: 600; }
 
 .painel-perigo { border-color: #7f1d1d; }
 .painel-perigo .aviso { color: #fde68a; }
+
+/* galeria do NRO */
+.linha-rodape { display: flex; gap: 8px; }
+.linha-rodape .btn { flex: 1; }
+.galeria { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.foto-cartao { background: var(--painel); border: 1px solid var(--borda); border-radius: 12px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.foto-cartao img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; background: #0b1222; cursor: zoom-in; }
+.foto-grande { max-width: 96vw; max-height: 90vh; border-radius: 10px; margin: auto; }
+
+/* lista de veículos na gestão */
+.titulo-patio { cursor: pointer; }
+.titulo-patio:hover { text-decoration: underline; }
+.filtros-gestao { flex-wrap: wrap; margin: 10px 0; }
+.filtros-gestao button { flex: 0 0 auto; }
+.linha-clicavel { cursor: pointer; }
+.linha-clicavel:hover td { background: var(--painel2); }
+.galeria-gestao { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); padding: 8px 0; }

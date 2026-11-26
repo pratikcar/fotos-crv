@@ -53,7 +53,7 @@
   }
 
   // ---------- navegação ----------
-  const TELAS = ['telaLogin', 'telaPatios', 'telaCategorias', 'telaLista', 'telaFila'];
+  const TELAS = ['telaLogin', 'telaPatios', 'telaCategorias', 'telaLista', 'telaFila', 'telaGaleria'];
   function mostrar(tela, empilhar) {
     st.tela = tela;
     TELAS.forEach(function (t) { $(t).classList.toggle('oculto', t !== tela); });
@@ -79,6 +79,7 @@
     else if (st.tela === 'telaCategorias') desenharCategorias();
     else if (st.tela === 'telaLista') desenharLista();
     else if (st.tela === 'telaFila') desenharFila();
+    else if (st.tela === 'telaGaleria') desenharGaleria();
     else $('titulo').textContent = 'Fotos Pátio CRV';
   }
 
@@ -87,7 +88,7 @@
   async function recarregarFila() {
     const fila = await N.filaTodos();
     const mapa = {};
-    fila.forEach(function (f) { const k = f.loteId + '|' + f.nro; mapa[k] = (mapa[k] || 0) + 1; });
+    fila.forEach(function (f) { if (f.apagadaCampo) return; const k = f.loteId + '|' + f.nro; mapa[k] = (mapa[k] || 0) + 1; });
     st.pendLocal = mapa;
     st.filaTotal = fila.length;
     return fila;
@@ -255,6 +256,7 @@
       if (e === 'bloq') stx = '⛔ NÃO DESTINAR';
       else if (e === 'local') stx = '📱 ' + st.pendLocal[l.loteId + '|' + v.nro] + ' no celular';
       else if (e === 'feito') stx = '✅ ' + v.fotos + ' foto' + (v.fotos === 1 ? '' : 's');
+      else if (v.refazer) stx = '⚠️ refazer';
       b.appendChild(el('div', 'st', stx));
       b.addEventListener('click', function () {
         if (e === 'bloq') { toast('NRO ' + v.nro + ': NÃO DESTINAR — não pode sair do CRV.' + (v.motivo ? ' (' + v.motivo + '…)' : '')); return; }
@@ -269,6 +271,14 @@
 
   function desenharRodape() {
     const s = st.sel;
+    const l = loteAtual();
+    let nFotos = 0;
+    if (s && l) {
+      const v = l.veiculos.find(function (x) { return x.nro === s.nro; });
+      nFotos = (v ? (v.fotos || 0) : 0) + (st.pendLocal[l.loteId + '|' + s.nro] || 0);
+    }
+    $('btnVerFotos').classList.toggle('oculto', !nFotos);
+    $('btnVerFotos').textContent = '🖼 Ver fotos (' + nFotos + ')';
     $('btnTirarFotos').disabled = !s;
     $('btnTirarFotos').textContent = s ? '📷 Tirar fotos do NRO ' + s.nro : '📷 Selecione um NRO na lista';
     $('rodapeDetalhe').textContent = s ? [s.placa || (s.foraDaLista ? 'fora da lista' : 'sem placa'), s.modelo, s.cor].filter(Boolean).join(' · ') : '';
@@ -309,6 +319,84 @@
     desenharRodape();
     abrirCamera();
   });
+
+  // ---------- galeria do NRO ----------
+  $('btnVerFotos').addEventListener('click', function () { if (st.sel) mostrar('telaGaleria', true); });
+
+  function cartaoFoto(src, legenda, aoApagar, bloqueada) {
+    const c = el('div', 'foto-cartao');
+    const img = el('img'); img.alt = legenda; if (src) img.src = src;
+    img.addEventListener('click', function () { if (img.src) ampliar(img.src); });
+    c.appendChild(img);
+    c.appendChild(el('div', 'suave', legenda));
+    if (bloqueada) c.appendChild(el('div', 'tag verde', '✔ Já baixada pela gestão'));
+    else if (aoApagar) {
+      const b = el('button', 'btn pequeno vermelho', '🗑 Apagar');
+      b.addEventListener('click', aoApagar);
+      c.appendChild(b);
+    }
+    return { cartao: c, img: img };
+  }
+
+  function ampliar(src) {
+    const fundo = el('div', 'modal-fundo');
+    const img = el('img', 'foto-grande'); img.src = src; img.alt = 'Foto ampliada';
+    fundo.appendChild(img);
+    fundo.addEventListener('click', function () { fundo.remove(); });
+    document.body.appendChild(fundo);
+  }
+
+  async function desenharGaleria() {
+    const l = loteAtual();
+    if (!l || !st.sel) { mostrar('telaPatios', false); return; }
+    const nro = st.sel.nro;
+    $('titulo').textContent = 'NRO ' + nro + ' · fotos';
+    const boxL = $('galeriaLocais'), boxE = $('galeriaEnviadas');
+    boxL.querySelectorAll('img').forEach(function (i) { if (i.src.indexOf('blob:') === 0) URL.revokeObjectURL(i.src); });
+    boxL.textContent = ''; boxE.textContent = ''; $('galeriaAviso').textContent = '';
+
+    // fotos ainda no celular
+    const fila = (await N.filaTodos()).filter(function (f) { return f.loteId === l.loteId && f.nro === nro && !f.apagadaCampo; });
+    $('tituloLocais').classList.toggle('oculto', !fila.length);
+    fila.forEach(function (f) {
+      const r = cartaoFoto(URL.createObjectURL(f.blob), hora(f.tiradaEm), async function () {
+        const ok = await modal('Apagar foto?', 'A foto sai da sua tela, mas continua sendo enviada para a gestão.', [{ texto: 'Apagar', cls: 'vermelho', valor: 1 }, { texto: 'Cancelar', cls: 'cinza', valor: null }]);
+        if (!ok) return;
+        f.apagadaCampo = true; await N.filaPut(f);
+        await recarregarFila(); desenharGaleria(); desenharRodape();
+      });
+      boxL.appendChild(r.cartao);
+    });
+
+    // fotos já enviadas (precisa de internet)
+    $('tituloEnviadas').classList.add('oculto');
+    if (!navigator.onLine) { $('galeriaAviso').textContent = 'Sem internet: só aparecem as fotos que ainda estão no celular.'; return; }
+    const token = await N.kvGet('token');
+    let enviadas;
+    try { enviadas = await N.chamarApi('fotosVeiculo', { loteId: l.loteId, nro: nro }, token); }
+    catch (e) { $('galeriaAviso').textContent = e.code === 'REDE' ? 'Sem conexão com o servidor: só aparecem as fotos do celular.' : e.message; return; }
+    if (st.tela !== 'telaGaleria') return;
+    $('tituloEnviadas').classList.toggle('oculto', !enviadas.length);
+    if (!enviadas.length && !fila.length) $('galeriaAviso').textContent = 'Nenhuma foto deste NRO.';
+    enviadas.forEach(function (f) {
+      const r = cartaoFoto(null, f.nome + ' · ' + hora(f.tiradaEm), f.baixada ? null : async function () {
+        const ok = await modal('Apagar foto?', 'A foto sai da sua tela, mas continua com a gestão.', [{ texto: 'Apagar', cls: 'vermelho', valor: 1 }, { texto: 'Cancelar', cls: 'cinza', valor: null }]);
+        if (!ok) return;
+        try {
+          await N.chamarApi('ocultarFoto', { uuid: f.uuid }, token);
+          const v = l.veiculos.find(function (x) { return x.nro === nro; });
+          if (v) { v.fotos = Math.max(0, (v.fotos || 0) - 1); if (!v.fotos) v.status = 'pendente'; }
+          await N.kvSet('dadosCampo', st.dados);
+          toast('Foto apagada da sua tela.');
+          desenharGaleria(); desenharRodape();
+        } catch (e) { toast(e.code === 'REDE' ? 'Sem internet para apagar agora.' : e.message); }
+      }, f.baixada);
+      boxE.appendChild(r.cartao);
+      N.chamarApi('miniatura', { uuid: f.uuid }, token).then(function (m) {
+        r.img.src = 'data:' + m.tipo + ';base64,' + m.base64;
+      }).catch(function () { r.img.alt = 'não carregou'; });
+    });
+  }
 
   // ---------- câmera ----------
   $('btnTirarFotos').addEventListener('click', function () { if (st.sel) abrirCamera(); });
@@ -519,7 +607,7 @@
       c.appendChild(img);
       const d = el('div', 'desc');
       d.appendChild(el('div', 'placa', 'NRO ' + f.nro + ' · ' + (nomes[f.loteId] || 'pátio encerrado')));
-      d.appendChild(el('div', 'mod', hora(f.tiradaEm) + (f.erro ? ' · ' + f.erro : '')));
+      d.appendChild(el('div', 'mod', hora(f.tiradaEm) + (f.apagadaCampo ? ' · apagada por você (vai só para a gestão)' : '') + (f.erro ? ' · ' + f.erro : '')));
       c.appendChild(d);
       if (f.travada) {
         const col = el('div');

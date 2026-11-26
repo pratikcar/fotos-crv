@@ -80,6 +80,7 @@
 
   /** Atualiza o cache local da lista quando uma foto chega ao servidor. */
   async function marcarEnviadoLocal(item) {
+    if (item.apagadaCampo) return; // foi apagada pelo campo: vai só para a gestão
     const dados = await kvGet('dadosCampo');
     if (!dados || !dados.lotes) return;
     const lote = dados.lotes.find(function (l) { return l.loteId === item.loteId; });
@@ -108,7 +109,7 @@
           const hash = await shaBlob(item.blob);
           const resp = await chamarApi('enviarFoto', {
             uuid: item.uuid, loteId: item.loteId, nro: item.nro, categoria: item.categoria,
-            tiradaEm: item.tiradaEm, foraDaLista: !!item.foraDaLista, imagem: imagem, sha256: hash
+            tiradaEm: item.tiradaEm, foraDaLista: !!item.foraDaLista, imagem: imagem, sha256: hash, ocultaCampo: !!item.apagadaCampo
           }, token);
           // só apaga do celular se o servidor confirmar a mesma impressão digital
           const confere = resp && (resp.sha256 === hash || (resp.duplicado && !resp.sha256));

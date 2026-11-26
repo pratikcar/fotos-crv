@@ -62,6 +62,16 @@
     <button class="btn cinza" id="btnManual">Digitar NRO fora da lista</button>
   </section>
 
+  <!-- GALERIA DO NRO -->
+  <section id="telaGaleria" class="oculto">
+    <div id="galeriaAviso" class="suave"></div>
+    <div class="titulo-secao oculto" id="tituloLocais">No celular (aguardando envio)</div>
+    <div class="galeria" id="galeriaLocais"></div>
+    <div class="titulo-secao oculto" id="tituloEnviadas">Enviadas</div>
+    <div class="galeria" id="galeriaEnviadas"></div>
+    <p class="suave">"Apagar" tira a foto só da sua tela. Ela continua indo para a gestão. Fotos já baixadas pela gestão não podem ser apagadas.</p>
+  </section>
+
   <!-- FILA DE ENVIO -->
   <section id="telaFila" class="oculto">
     <div class="cartao">
@@ -74,7 +84,10 @@
 
 <div class="rodape-fixo oculto" id="rodapeFoto">
   <div class="detalhe" id="rodapeDetalhe"></div>
-  <button class="btn verde" id="btnTirarFotos" disabled>📷 Tirar fotos</button>
+  <div class="linha-rodape">
+    <button class="btn cinza oculto" id="btnVerFotos">🖼 Ver fotos</button>
+    <button class="btn verde" id="btnTirarFotos" disabled>📷 Tirar fotos</button>
+  </div>
 </div>
 
 <!-- CÂMERA -->
