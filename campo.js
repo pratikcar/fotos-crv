@@ -561,7 +561,18 @@
   });
 
   // ---------- início ----------
-  window.addEventListener('online', function () { atualizarSelos(); enviarFila(); });
+  // lista sempre atualizada: a cada 2 min, só com o app aberto na tela e com internet
+  let ultimaAtualizacao = Date.now();
+  async function atualizarSePreciso(minimoMs) {
+    if (!st.sessao || !navigator.onLine || document.visibilityState !== 'visible') return;
+    if (!$('camera').classList.contains('oculto')) return;
+    if (Date.now() - ultimaAtualizacao < minimoMs) return;
+    ultimaAtualizacao = Date.now();
+    await atualizarListas(true);
+  }
+  setInterval(function () { atualizarSePreciso(110000); }, 120000);
+  document.addEventListener('visibilitychange', function () { atualizarSePreciso(30000); });
+  window.addEventListener('online', function () { atualizarSelos(); enviarFila(); atualizarSePreciso(0); });
   window.addEventListener('offline', atualizarSelos);
   setInterval(function () { if (navigator.onLine && st.filaTotal && !st.enviando) enviarFila(); }, 60000);
 

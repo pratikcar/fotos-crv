@@ -114,7 +114,14 @@
       if (l.ativo && !confirm('Encerrar o pátio ' + l.patio + (l.numeroLote ? ' (lista ' + l.numeroLote + ')' : '') + '? Ele some do app de campo. Fotos já guardadas no celular ainda serão enviadas.')) return;
       try { await api('definirAtivo', { loteId: l.loteId, ativo: !l.ativo }); carregarLotes(); } catch (e) { alert(e.message); }
     });
-    [bBaixar, bIds, bAtivo].forEach(function (b) { btns.appendChild(b); });
+    const bEditar = el('button', 'btn pequeno cinza', '✏️ Editar');
+    bEditar.addEventListener('click', function () { painelEditar(l, detalhe); });
+    [bBaixar, bIds, bEditar, bAtivo].forEach(function (b) { btns.appendChild(b); });
+    if (st.sessao && st.sessao.papel === 'admin') {
+      const bExcluir = el('button', 'btn pequeno vermelho', '🗑 Excluir');
+      bExcluir.addEventListener('click', function () { painelExcluir(l, detalhe); });
+      btns.appendChild(bExcluir);
+    }
     c.appendChild(btns); c.appendChild(status); c.appendChild(detalhe);
     return c;
   }
@@ -158,13 +165,67 @@
     desenhar();
   }
 
+  // ---------- editar / excluir pátio ----------
+  function abrirPainel(box, nome) {
+    if (box.dataset.painel === nome) { box.textContent = ''; box.dataset.painel = ''; return false; }
+    box.textContent = ''; box.dataset.painel = nome; return true;
+  }
+
+  function painelEditar(l, box) {
+    if (!abrirPainel(box, 'editar')) return;
+    const p = el('div', 'cartao painel-baixar');
+    p.appendChild(el('h3', null, 'Editar pátio'));
+    p.appendChild(el('label', null, 'Nome do pátio CRV'));
+    const iPatio = el('input'); iPatio.type = 'text'; iPatio.maxLength = 60; iPatio.value = l.patio; p.appendChild(iPatio);
+    p.appendChild(el('label', null, 'Número da lista (opcional)'));
+    const iLista = el('input'); iLista.type = 'text'; iLista.maxLength = 30; iLista.value = l.numeroLote || ''; p.appendChild(iLista);
+    p.appendChild(el('p', 'suave', 'As fotos já tiradas passam a aparecer com o nome novo no .zip. No celular, o nome muda na próxima atualização da lista.'));
+    const msg = el('div', 'erro'); p.appendChild(msg);
+    const b = el('button', 'btn verde', 'Salvar alterações'); p.appendChild(b);
+    b.addEventListener('click', async function () {
+      msg.className = 'erro'; msg.textContent = '';
+      if (!iPatio.value.trim()) { msg.textContent = 'Informe o nome do pátio.'; return; }
+      b.disabled = true;
+      try {
+        await api('editarLote', { loteId: l.loteId, patio: iPatio.value.trim(), numeroLote: iLista.value.trim() });
+        msg.className = 'ok'; msg.textContent = 'Alterações salvas.';
+        setTimeout(carregarLotes, 1200);
+      } catch (e) { msg.textContent = e.message; b.disabled = false; }
+    });
+    box.appendChild(p);
+    iPatio.focus();
+  }
+
+  function painelExcluir(l, box) {
+    if (!abrirPainel(box, 'excluir')) return;
+    const p = el('div', 'cartao painel-baixar painel-perigo');
+    p.appendChild(el('h3', 'erro', '🗑 Excluir o pátio ' + l.patio));
+    p.appendChild(el('p', null, 'Isto remove o pátio, a lista de ' + l.total + ' veículos e as ' + l.fotos + ' foto(s) dele. As fotos vão para a lixeira do Google Drive e podem ser recuperadas por 30 dias.'));
+    if (l.naoBaixadas) p.appendChild(el('p', 'aviso', '⚠️ ' + l.naoBaixadas + ' foto(s) deste pátio ainda NÃO foram baixadas. Baixe antes de excluir se precisar delas.'));
+    p.appendChild(el('p', 'suave', 'Fotos ainda guardadas em celulares para este pátio não poderão mais ser enviadas.'));
+    p.appendChild(el('label', null, 'Para confirmar, digite o nome do pátio: ' + l.patio));
+    const i = el('input'); i.type = 'text'; i.autocomplete = 'off'; p.appendChild(i);
+    const msg = el('div', 'erro'); p.appendChild(msg);
+    const b = el('button', 'btn vermelho', 'Excluir definitivamente'); b.disabled = true; p.appendChild(b);
+    i.addEventListener('input', function () { b.disabled = i.value.trim().toUpperCase() !== String(l.patio).trim().toUpperCase(); });
+    b.addEventListener('click', async function () {
+      b.disabled = true; msg.textContent = '';
+      try {
+        const r = await api('excluirLote', { loteId: l.loteId, confirmacao: i.value.trim() });
+        msg.className = 'ok'; msg.textContent = 'Pátio excluído. ' + r.fotosNaLixeira + ' foto(s) foram para a lixeira do Drive.';
+        setTimeout(carregarLotes, 1500);
+      } catch (e) { msg.className = 'erro'; msg.textContent = e.message; b.disabled = false; }
+    });
+    box.appendChild(p);
+    i.focus();
+  }
+
   // ---------- download .zip ----------
   function dataBR(iso) { const p = String(iso).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso; }
   function dataDaFoto(f) { return String(f.caminho).split('/')[1] || ''; }
 
   async function painelBaixar(l, box, status) {
-    if (box.dataset.painel === 'baixar') { box.textContent = ''; box.dataset.painel = ''; return; }
-    box.textContent = ''; box.dataset.painel = 'baixar';
+    if (!abrirPainel(box, 'baixar')) return;
     box.appendChild(el('p', 'suave', 'Carregando fotos…'));
     let fotos;
     try { fotos = await api('listarFotos', { loteId: l.loteId, somenteNaoBaixadas: false }); }
