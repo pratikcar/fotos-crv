@@ -30,8 +30,8 @@
 
   <section id="telaApp" class="oculto">
     <div class="abas">
-      <button data-aba="abaLotes" class="ativo">Lotes</button>
-      <button data-aba="abaNovo">+ Novo lote (Excel)</button>
+      <button data-aba="abaLotes" class="ativo">Pátios</button>
+      <button data-aba="abaNovo">+ Novo pátio (Excel)</button>
       <button data-aba="abaUsuarios" class="oculto" id="botaoAbaUsuarios">Usuários</button>
       <button data-aba="abaConta">Minha senha</button>
     </div>
@@ -47,14 +47,15 @@
         <input type="file" id="inputXlsx" accept=".xlsx" class="oculto">
         <div class="erro" id="novoErro"></div>
         <div id="previa" class="oculto">
+          <div id="verificacao"></div>
           <div class="resumo-num" id="previaNums"></div>
           <div class="grade">
-            <div><label for="novoPatio">Pátio CRV</label><input type="text" id="novoPatio" maxlength="60"></div>
-            <div><label for="novoLote">Número do lote</label><input type="text" id="novoLote" maxlength="30"></div>
+            <div><label for="novoPatio">Pátio CRV (obrigatório)</label><input type="text" id="novoPatio" maxlength="60"></div>
+            <div><label for="novoLote">Número da lista (opcional)</label><input type="text" id="novoLote" maxlength="30"></div>
           </div>
           <div id="previaAvisos" class="suave"></div>
           <div class="rolagem"><table id="previaTabela"></table></div>
-          <div class="linha-btns"><button class="btn verde" id="btnCriarLote">Criar lote e liberar para o campo</button></div>
+          <div class="linha-btns"><button class="btn verde" id="btnCriarLote">Criar pátio e liberar para o campo</button></div>
         </div>
       </div>
     </div>

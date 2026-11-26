@@ -190,7 +190,7 @@
       const c = contar(l);
       const b = el('button', 'botao-grande');
       b.appendChild(el('div', 'nome', l.patio));
-      b.appendChild(el('div', 'info', 'Lote ' + (l.numeroLote || '—') + ' · ' + c.feitos + ' de ' + c.total + ' fotografados'));
+      b.appendChild(el('div', 'info', (l.numeroLote ? 'Lista ' + l.numeroLote + ' · ' : '') + c.feitos + ' de ' + c.total + ' fotografados'));
       const barra = el('div', 'barra'); const p = el('div'); p.style.width = (c.total ? Math.round(100 * c.feitos / c.total) : 0) + '%';
       barra.appendChild(p); b.appendChild(barra);
       b.addEventListener('click', function () { st.loteId = l.loteId; mostrar('telaCategorias', true); });
@@ -202,7 +202,7 @@
   function desenharCategorias() {
     const l = loteAtual();
     if (!l) { mostrar('telaPatios', false); return; }
-    $('titulo').textContent = l.patio + ' · lote ' + (l.numeroLote || '—');
+    $('titulo').textContent = l.patio + (l.numeroLote ? ' · lista ' + l.numeroLote : '');
     const box = $('listaCategorias');
     box.textContent = '';
     ['carros', 'motos', 'outros'].forEach(function (cat) {
@@ -518,7 +518,7 @@
       const img = el('img'); img.src = URL.createObjectURL(f.blob); img.alt = ''; img.height = 56;
       c.appendChild(img);
       const d = el('div', 'desc');
-      d.appendChild(el('div', 'placa', 'NRO ' + f.nro + ' · ' + (nomes[f.loteId] || 'lote encerrado')));
+      d.appendChild(el('div', 'placa', 'NRO ' + f.nro + ' · ' + (nomes[f.loteId] || 'pátio encerrado')));
       d.appendChild(el('div', 'mod', hora(f.tiradaEm) + (f.erro ? ' · ' + f.erro : '')));
       c.appendChild(d);
       if (f.travada) {

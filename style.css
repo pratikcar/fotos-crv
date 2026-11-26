@@ -107,3 +107,9 @@ th { color: var(--suave); font-weight: 600; }
 .resumo-num b { display: block; font-size: 22px; }
 .rolagem { overflow-x: auto; max-height: 60vh; overflow-y: auto; }
 .gestor main { max-width: 1000px; }
+
+/* verificação da planilha */
+.verif h3 { margin: 0 0 10px; }
+.verif .aviso { color: #fde68a; margin: 4px 0; }
+.verif .erro { color: #fca5a5; margin: 4px 0; }
+.verif table { margin-top: 6px; }

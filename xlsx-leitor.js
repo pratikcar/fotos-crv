@@ -74,58 +74,106 @@
       .toUpperCase().replace(/\s+/g, ' ').trim();
   }
 
-  /** Converte as linhas da lista de destinação em veículos. */
+  function letra(i) {
+    let s = ''; i++;
+    while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); }
+    return s;
+  }
+
+  // Colunas esperadas na lista de destinação. nivel: bloqueio = sem ela não dá para criar o pátio.
+  const CAMPOS = [
+    { campo: 'nro', nomes: ['NRO'], rotulo: 'NRO (ID do veículo)', nivel: 'bloqueio' },
+    { campo: 'porte', nomes: ['PORTE'], rotulo: 'PORTE (separa carros, motos e outros)', nivel: 'bloqueio' },
+    { campo: 'dest', nomes: ['DT DESTINACAO'], rotulo: 'DT DESTINAÇÃO (marca o NÃO DESTINAR)', nivel: 'aviso' },
+    { campo: 'placa', nomes: ['PLACA'], rotulo: 'PLACA', nivel: 'aviso' },
+    { campo: 'modelo', nomes: ['MARCA / MODELO', 'MARCA/MODELO', 'MODELO'], rotulo: 'MARCA / MODELO', nivel: 'aviso' },
+    { campo: 'cor', nomes: ['COR'], rotulo: 'COR', nivel: 'aviso' },
+    { campo: 'chassi', nomes: ['CHASSI'], rotulo: 'CHASSI', nivel: 'aviso' },
+    { campo: 'uf', nomes: ['UF'], rotulo: 'UF', nivel: 'info' },
+    { campo: 'motivo', nomes: ['DT DESCARACTERIZACAO'], rotulo: 'Motivo do NÃO DESTINAR', nivel: 'info' }
+  ];
+  const PORTE_CONHECIDO = /MOTO|GERAL|CARRO|AUTOMOVEL|PESADO|CAMINH|ONIBUS|BICICLETA|REBOQUE|TRATOR|UTILITARIO/;
+
+  /**
+   * Converte as linhas da lista de destinação em veículos e verifica se a planilha é compatível.
+   * Retorna { veiculos, bloqueios, avisos, colunas, portes }. Com bloqueios, o pátio não pode ser criado.
+   */
   function extrairVeiculos(linhas) {
+    const bloqueios = [], avisos = [], infos = [], colunas = [];
     let cab = -1;
     for (let i = 0; i < Math.min(linhas.length, 30); i++) {
       if ((linhas[i] || []).some(function (c) { return norm(c) === 'NRO'; })) { cab = i; break; }
     }
-    if (cab < 0) throw new Error('Não encontrei a coluna NRO na planilha.');
+    if (cab < 0) {
+      bloqueios.push('Não encontrei a linha de cabeçalho com a coluna NRO nas 30 primeiras linhas. Esta planilha não está no formato da lista de destinação.');
+      return { veiculos: [], bloqueios: bloqueios, avisos: avisos, colunas: colunas, portes: [] };
+    }
     const h = linhas[cab].map(norm);
-    const col = function () {
-      for (let k = 0; k < arguments.length; k++) {
-        const nome = arguments[k];
-        const i = h.findIndex(function (x) { return x === nome; });
-        if (i >= 0) return i;
-      }
-      for (let k = 0; k < arguments.length; k++) {
-        const nome = arguments[k];
-        const i = h.findIndex(function (x) { return x.indexOf(nome) >= 0; });
-        if (i >= 0) return i;
-      }
-      return -1;
-    };
-    const C = {
-      nro: col('NRO'), dest: col('DT DESTINACAO'), placa: col('PLACA'), uf: col('UF'),
-      modelo: col('MARCA / MODELO', 'MARCA/MODELO', 'MODELO'), cor: col('COR'), chassi: col('CHASSI'),
-      porte: col('PORTE'), motivo: col('DT DESCARACTERIZACAO')
-    };
+    const usadas = {};
+    const C = {};
+    CAMPOS.forEach(function (def) {
+      let idx = -1;
+      def.nomes.forEach(function (n) { if (idx < 0) idx = h.findIndex(function (x, i) { return !usadas[i] && x === n; }); });
+      def.nomes.forEach(function (n) { if (idx < 0) idx = h.findIndex(function (x, i) { return !usadas[i] && x && x.indexOf(n) >= 0; }); });
+      if (idx >= 0) usadas[idx] = true;
+      C[def.campo] = idx;
+      colunas.push({ rotulo: def.rotulo, coluna: idx >= 0 ? letra(idx) : null, titulo: idx >= 0 ? String(linhas[cab][idx]) : null, nivel: def.nivel });
+      if (idx < 0 && def.nivel === 'bloqueio') bloqueios.push('Falta a coluna ' + def.rotulo + '.');
+      if (idx < 0 && def.nivel === 'aviso') avisos.push('Falta a coluna ' + def.rotulo + ' — essa informação não vai aparecer no app.');
+    });
+    if (C.nro < 0) return { veiculos: [], bloqueios: bloqueios, avisos: avisos, colunas: colunas, portes: [] };
+
     const val = function (l, i) { return i >= 0 && l[i] !== undefined ? String(l[i]).trim() : ''; };
     const veiculos = [];
-    const avisos = [];
     const vistos = {};
+    const invalidos = [], repetidos = [];
+    const portes = {};
     for (let i = cab + 1; i < linhas.length; i++) {
       const l = linhas[i] || [];
       const nroBruto = val(l, C.nro);
       if (!nroBruto) continue;
-      if (!/^\d+(\.0+)?$/.test(nroBruto)) { avisos.push('Linha ' + (i + 1) + ': NRO "' + nroBruto + '" ignorado (não é número).'); continue; }
+      if (!/^\d+(\.0+)?$/.test(nroBruto)) { invalidos.push('linha ' + (i + 1) + ' ("' + nroBruto.slice(0, 20) + '")'); continue; }
       const nro = String(parseInt(nroBruto, 10));
-      if (vistos[nro]) { avisos.push('Linha ' + (i + 1) + ': NRO ' + nro + ' repetido — mantida a primeira ocorrência.'); continue; }
+      if (vistos[nro]) { repetidos.push(nro + ' (linha ' + (i + 1) + ')'); continue; }
       vistos[nro] = true;
       const naoDestinar = l.some(function (c) { return norm(c).indexOf('NAO DESTINAR') >= 0; });
       let motivo = val(l, C.motivo);
       if (/^\d+(\.\d+)?$/.test(motivo)) motivo = ''; // é data, não motivo
+      const porte = val(l, C.porte);
+      const chave = porte || '(vazio)';
+      if (!portes[chave]) portes[chave] = { valor: chave, qtd: 0, categoria: categoria(porte), conhecido: PORTE_CONHECIDO.test(norm(porte)) };
+      portes[chave].qtd++;
       veiculos.push({
         nro: nro, placa: val(l, C.placa).toUpperCase(), uf: val(l, C.uf).toUpperCase(),
-        modelo: val(l, C.modelo), cor: val(l, C.cor), chassi: val(l, C.chassi), porte: val(l, C.porte),
+        modelo: val(l, C.modelo), cor: val(l, C.cor), chassi: val(l, C.chassi), porte: porte,
         naoDestinar: naoDestinar, motivo: naoDestinar ? motivo : ''
       });
     }
-    return { veiculos: veiculos, avisos: avisos };
+    const listaPortes = C.porte < 0 ? [] : Object.keys(portes).map(function (k) { return portes[k]; });
+    if (!veiculos.length) bloqueios.push('Nenhum veículo com NRO numérico foi encontrado abaixo do cabeçalho.');
+    if (invalidos.length) avisos.push(invalidos.length + ' linha(s) com NRO que não é número foram ignoradas: ' + invalidos.slice(0, 5).join(', ') + (invalidos.length > 5 ? '…' : '') + '.');
+    if (repetidos.length) avisos.push(repetidos.length + ' NRO(s) repetido(s) — mantida a primeira ocorrência: ' + repetidos.slice(0, 5).join(', ') + (repetidos.length > 5 ? '…' : '') + '.');
+    const desconhecidos = listaPortes.filter(function (p) { return !p.conhecido; });
+    if (C.porte >= 0 && desconhecidos.length) {
+      avisos.push('PORTE não reconhecido (vai para "Outros"): ' + desconhecidos.map(function (p) { return '"' + p.valor + '" × ' + p.qtd; }).join(', ') + '.');
+    }
+    if (C.porte >= 0 && veiculos.length && desconhecidos.reduce(function (a, p) { return a + p.qtd; }, 0) > veiculos.length / 2) {
+      bloqueios.push('Mais da metade dos veículos tem PORTE não reconhecido — a coluna PORTE parece estar com outro conteúdo.');
+    }
+    if (C.placa >= 0 && veiculos.length >= 10 && veiculos.filter(function (v) { return !v.placa; }).length > veiculos.length / 2) {
+      avisos.push('Mais da metade dos veículos está sem placa — confira se a coluna PLACA está certa.');
+    }
+    const reboques = veiculos.filter(function (v) { return norm(v.modelo).indexOf('REBOQUE') >= 0; }).length;
+    if (reboques) infos.push(reboques + ' reboque(s) identificado(s) pelo modelo — vão para "Outros".');
+    if (veiculos.length && !veiculos.some(function (v) { return v.naoDestinar; })) {
+      avisos.push('Nenhum veículo NÃO DESTINAR foi encontrado. Se a lista tiver algum, a marcação está num formato diferente.');
+    }
+    return { veiculos: veiculos, bloqueios: bloqueios, avisos: avisos, infos: infos, colunas: colunas, portes: listaPortes };
   }
 
-  function categoria(porte) {
+  function categoria(porte, modelo) {
     const p = norm(porte);
+    if (norm(modelo).indexOf('REBOQUE') >= 0) return 'outros'; // reboques e semirreboques vão para Outros
     if (p.indexOf('MOTO') >= 0) return 'motos';
     if (p.indexOf('GERAL') >= 0 || p.indexOf('CARRO') >= 0 || p.indexOf('AUTOMOVEL') >= 0) return 'carros';
     return 'outros';

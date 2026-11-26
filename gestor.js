@@ -5,7 +5,7 @@
   const $ = function (id) { return document.getElementById(id); };
   const CHAVE_TOKEN = 'tokenGestor';
   const POR_VEZ = 10; // fotos por chamada de download
-  const st = { token: null, sessao: null, previa: null, arquivo: '' };
+  const st = { token: null, sessao: null, previa: null, arquivo: '', bloqueado: true };
 
   function el(tag, cls, texto) {
     const e = document.createElement(tag);
@@ -83,13 +83,13 @@
     try { lotes = await api('listarLotes', { incluirEncerrados: true }); }
     catch (e) { box.textContent = ''; box.appendChild(el('p', 'erro', e.message)); return; }
     box.textContent = '';
-    if (!lotes.length) { box.appendChild(el('p', 'suave', 'Nenhum lote ainda. Use "+ Novo lote" para enviar a planilha.')); return; }
+    if (!lotes.length) { box.appendChild(el('p', 'suave', 'Nenhum pátio ainda. Use "+ Novo pátio" para enviar a planilha.')); return; }
     lotes.forEach(function (l) { box.appendChild(cartaoLote(l)); });
   }
 
   function cartaoLote(l) {
     const c = el('div', 'cartao');
-    const t = el('h3', null, l.patio + ' · lote ' + (l.numeroLote || '—') + ' ');
+    const t = el('h3', null, l.patio + (l.numeroLote ? ' · lista ' + l.numeroLote : '') + ' ');
     t.appendChild(el('span', 'tag ' + (l.ativo ? 'verde' : ''), l.ativo ? 'ativo' : 'encerrado'));
     c.appendChild(t);
     c.appendChild(el('div', 'suave', 'Criado em ' + data(l.criadoEm) + (l.arquivo ? ' · ' + l.arquivo : '')));
@@ -112,9 +112,9 @@
     const bIds = el('button', 'btn pequeno cinza', 'Ver IDs');
     const detalhe = el('div');
     bIds.addEventListener('click', function () { verIds(l, detalhe); });
-    const bAtivo = el('button', 'btn pequeno ' + (l.ativo ? 'vermelho' : 'cinza'), l.ativo ? 'Encerrar lote' : 'Reabrir lote');
+    const bAtivo = el('button', 'btn pequeno ' + (l.ativo ? 'vermelho' : 'cinza'), l.ativo ? 'Encerrar pátio' : 'Reabrir pátio');
     bAtivo.addEventListener('click', async function () {
-      if (l.ativo && !confirm('Encerrar o lote ' + (l.numeroLote || '') + ' de ' + l.patio + '? Ele some do app de campo. Fotos já guardadas no celular dele ainda serão enviadas.')) return;
+      if (l.ativo && !confirm('Encerrar o pátio ' + l.patio + (l.numeroLote ? ' (lista ' + l.numeroLote + ')' : '') + '? Ele some do app de campo. Fotos já guardadas no celular ainda serão enviadas.')) return;
       try { await api('definirAtivo', { loteId: l.loteId, ativo: !l.ativo }); carregarLotes(); } catch (e) { alert(e.message); }
     });
     [bNovas, bTodas, bIds, bAtivo].forEach(function (b) { btns.appendChild(b); });
@@ -185,10 +185,10 @@
       // planilha-resumo do lote
       status.textContent = 'Montando resumo…';
       const vs = await api('veiculosLote', { loteId: l.loteId });
-      zip.file(nomeSeguro(l.patio) + '/resumo_lote_' + nomeSeguro(l.numeroLote || l.loteId) + '.csv', csvResumo(vs));
+      zip.file(nomeSeguro(l.patio) + '/resumo_' + nomeSeguro(l.patio) + (l.numeroLote ? '_lista' + nomeSeguro(l.numeroLote) : '') + '.csv', csvResumo(vs));
       status.textContent = 'Gerando o .zip…';
       const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
-      const nome = 'FOTOS_' + nomeSeguro(l.patio) + '_lote' + nomeSeguro(l.numeroLote || '') + '_' + hojeArquivo() + (somenteNovas ? '_novas' : '_todas') + '.zip';
+      const nome = 'FOTOS_' + nomeSeguro(l.patio) + (l.numeroLote ? '_lista' + nomeSeguro(l.numeroLote) : '') + '_' + hojeArquivo() + (somenteNovas ? '_novas' : '_todas') + '.zip';
       const a = el('a'); a.href = URL.createObjectURL(blob); a.download = nome;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
@@ -229,51 +229,85 @@
   $('inputXlsx').addEventListener('change', function () { if (this.files[0]) lerArquivo(this.files[0]); this.value = ''; });
 
   async function lerArquivo(f) {
-    $('novoErro').textContent = ''; $('previa').classList.add('oculto'); st.previa = null;
-    if (!/\.xlsx$/i.test(f.name)) { $('novoErro').textContent = 'Envie um arquivo .xlsx.'; return; }
+    $('novoErro').textContent = ''; $('previa').classList.add('oculto'); st.previa = null; st.bloqueado = true;
+    if (!/\.xlsx$/i.test(f.name)) { $('novoErro').textContent = 'Envie um arquivo .xlsx (Excel).'; return; }
     try {
       const linhas = await X.lerPlanilha(await f.arrayBuffer());
       const r = X.extrairVeiculos(linhas);
-      if (!r.veiculos.length) throw new Error('Nenhum veículo encontrado na planilha.');
-      st.previa = r.veiculos; st.arquivo = f.name;
+      st.previa = r.veiculos; st.arquivo = f.name; st.bloqueado = r.bloqueios.length > 0;
       const info = X.infoDoNome(f.name);
       $('novoPatio').value = info.patio; $('novoLote').value = info.numeroLote;
       mostrarPrevia(r);
-    } catch (e) { $('novoErro').textContent = 'Não consegui ler a planilha: ' + e.message; }
+    } catch (e) { $('novoErro').textContent = 'Não consegui abrir o arquivo como planilha Excel: ' + e.message; }
+  }
+
+  function linhaVerif(icone, texto, cls) {
+    const d = el('div', cls || ''); d.textContent = icone + ' ' + texto; return d;
+  }
+
+  function mostrarVerificacao(r) {
+    const box = $('verificacao'); box.textContent = '';
+    const c = el('div', 'cartao verif');
+    const ok = !r.bloqueios.length;
+    c.appendChild(el('h3', ok ? 'ok' : 'erro', ok ? (r.avisos.length ? '⚠️ Planilha compatível, com avisos' : '✅ Planilha compatível') : '❌ Planilha NÃO compatível — o pátio não pode ser criado'));
+    r.bloqueios.forEach(function (b) { c.appendChild(linhaVerif('❌', b, 'erro')); });
+    r.avisos.forEach(function (a) { c.appendChild(linhaVerif('⚠️', a, 'aviso')); });
+    (r.infos || []).forEach(function (a) { c.appendChild(linhaVerif('ℹ️', a, 'suave')); });
+    if (r.colunas.length) {
+      c.appendChild(el('div', 'suave', 'Colunas reconhecidas:'));
+      const t = el('table');
+      r.colunas.forEach(function (col) {
+        const tr = el('tr');
+        tr.appendChild(el('td', null, col.coluna ? '✅' : (col.nivel === 'bloqueio' ? '❌' : (col.nivel === 'aviso' ? '⚠️' : '—'))));
+        tr.appendChild(el('td', null, col.rotulo));
+        tr.appendChild(el('td', 'suave', col.coluna ? 'coluna ' + col.coluna + ' ("' + col.titulo + '")' : 'não encontrada'));
+        t.appendChild(tr);
+      });
+      c.appendChild(t);
+    }
+    if (r.portes.length) {
+      c.appendChild(el('div', 'suave', 'Valores de PORTE: ' + r.portes.map(function (p) {
+        return p.valor + ' × ' + p.qtd + ' → ' + p.categoria + (p.conhecido ? '' : ' (não reconhecido)');
+      }).join(' · ')));
+    }
+    box.appendChild(c);
   }
 
   function mostrarPrevia(r) {
+    mostrarVerificacao(r);
     const vs = r.veiculos;
     const cont = { carros: 0, motos: 0, outros: 0 };
     let bloq = 0, semPlaca = 0;
-    vs.forEach(function (v) { if (v.naoDestinar) bloq++; else cont[X.categoria(v.porte)]++; if (!v.placa) semPlaca++; });
+    vs.forEach(function (v) { if (v.naoDestinar) bloq++; else cont[X.categoria(v.porte, v.modelo)]++; if (!v.placa) semPlaca++; });
     const nums = $('previaNums'); nums.textContent = '';
     [[vs.length, 'veículos na planilha'], [vs.length - bloq, 'para fotografar'], [cont.carros, 'carros'], [cont.motos, 'motos'],
       [cont.outros, 'outros'], [bloq, 'NÃO DESTINAR'], [semPlaca, 'sem placa']].forEach(function (n) {
       const d = el('div'); d.appendChild(el('b', null, String(n[0]))); d.appendChild(document.createTextNode(n[1])); nums.appendChild(d);
     });
-    $('previaAvisos').textContent = r.avisos.slice(0, 10).join(' ') + (r.avisos.length > 10 ? ' (+' + (r.avisos.length - 10) + ' avisos)' : '');
+    $('previaAvisos').textContent = '';
     const tab = $('previaTabela'); tab.textContent = '';
     const cab = el('tr');
     ['NRO', 'Categoria', 'Placa', 'Modelo', 'Cor', 'Situação'].forEach(function (h) { cab.appendChild(el('th', null, h)); });
     tab.appendChild(cab);
     vs.forEach(function (v) {
       const tr = el('tr');
-      [v.nro, X.categoria(v.porte), v.placa, v.modelo, v.cor].forEach(function (x) { tr.appendChild(el('td', null, x || '—')); });
+      [v.nro, X.categoria(v.porte, v.modelo), v.placa, v.modelo, v.cor].forEach(function (x) { tr.appendChild(el('td', null, x || '—')); });
       const td = el('td'); if (v.naoDestinar) td.appendChild(el('span', 'tag vermelho', 'NÃO DESTINAR')); tr.appendChild(td);
       tab.appendChild(tr);
     });
     $('previa').classList.remove('oculto');
+    $('btnCriarLote').disabled = st.bloqueado;
+    $('btnCriarLote').textContent = st.bloqueado ? 'Planilha incompatível — corrija e envie de novo' : 'Criar pátio e liberar para o campo';
   }
 
   $('btnCriarLote').addEventListener('click', async function () {
-    if (!st.previa) return;
+    if (!st.previa || st.bloqueado) return;
     const patio = $('novoPatio').value.trim(), lote = $('novoLote').value.trim();
-    if (!patio) { $('novoErro').textContent = 'Informe o pátio.'; return; }
+    if (!patio) { $('novoErro').textContent = 'Informe o nome do pátio CRV (não deu para identificar pelo nome do arquivo).'; $('novoPatio').focus(); return; }
     $('btnCriarLote').disabled = true; $('novoErro').textContent = '';
     try {
       const r = await api('criarLote', { patio: patio, numeroLote: lote, arquivo: st.arquivo, veiculos: st.previa });
-      alert('Lote criado: ' + r.total + ' veículos (' + r.destinaveis + ' para fotografar). O pátio já aparece no app de campo.');
+      alert('Pátio criado: ' + r.total + ' veículos (' + r.destinaveis + ' para fotografar). O pátio já aparece no app de campo.');
       st.previa = null; $('previa').classList.add('oculto');
       trocarAba('abaLotes');
     } catch (e) { $('novoErro').textContent = e.message; }
