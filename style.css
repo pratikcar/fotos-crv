@@ -198,3 +198,13 @@ th { color: var(--suave); font-weight: 600; }
 .aviso-refazer { margin-top: 8px; color: #fde68a; font-weight: 600; }
 .campo-largo .acao-veiculo { background: var(--painel); }
 .campo-largo .chips-cat { flex-wrap: wrap; }
+.item.refazer { border-color: #92400e; }
+.item.refazer .nro { color: var(--amarelo); }
+.item.refazer .st { color: #fde68a; }
+.refazer-info { color: #fde68a !important; font-weight: 600; }
+.campo-largo #telaPatios { grid-column: 1; grid-row: 1; }
+.campo-largo #telaCategorias { grid-column: 1; grid-row: 2; }
+.campo-largo #telaCategorias .botao-grande { padding: 12px 14px; }
+.campo-largo #telaCategorias .botao-grande .nome { font-size: 18px; }
+.campo-largo #telaLista { grid-column: 2; grid-row: 1 / span 2; }
+.campo-largo #telaVeiculo { grid-column: 3; grid-row: 1 / span 2; }
