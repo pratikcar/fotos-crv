@@ -482,7 +482,7 @@
         const nome = String(f.caminho).split('/').pop();
         const ordem = Number((/_(\d+)/.exec(nome) || [])[1] || 0) - 1;
         legenda.textContent = '';
-        legenda.appendChild(el('b', null, (ordem === 0 ? 'Veículo' : ordem === 1 ? 'Placa' : 'Extra') + ' · foto ' + (fs.indexOf(f) + 1) + ' de ' + fs.length));
+        legenda.appendChild(el('b', null, (ordem === 0 ? 'Veículo' : ordem === 1 ? 'Placa' : ordem === 2 ? 'Placa descaracterizada' : 'Extra') + ' · foto ' + (fs.indexOf(f) + 1) + ' de ' + fs.length));
         const tb = el('span', 'tag ' + (f.baixada ? '' : 'azul')); tb.appendChild(ic(f.baixada ? 'check' : 'download')); tb.appendChild(document.createTextNode(f.baixada ? 'Já baixada' : 'Nova')); legenda.appendChild(tb);
         legenda.appendChild(el('span', 'suave', nome + ' · clique na foto para ampliar'));
         grande.src = st.minis[f.uuid] || '';
@@ -506,7 +506,7 @@
         img.addEventListener('click', function () { selecionar(f); });
         const fig = el('figure', 'mini-fig'); fig.appendChild(img);
         const ord = Number((/_(\d+)/.exec(String(f.caminho).split('/').pop()) || [])[1] || 0) - 1;
-        fig.appendChild(el('figcaption', null, ord === 0 ? 'Veículo' : ord === 1 ? 'Placa' : 'Extra'));
+        fig.appendChild(el('figcaption', null, ord === 0 ? 'Veículo' : ord === 1 ? 'Placa' : ord === 2 ? 'Descaract.' : 'Extra'));
         tira.appendChild(fig);
         const pronto = function (src) { img.src = src; if (st.fotoSel === f.uuid) grande.src = src; };
         if (st.minis[f.uuid]) pronto(st.minis[f.uuid]);

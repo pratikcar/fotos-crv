@@ -545,7 +545,7 @@
       await N.kvSet('minisCampo', m);
     } catch (e) { /* sem espaço: segue sem guardar */ }
   }
-  function tipoFoto(i) { return i === 0 ? 'Veículo' : i === 1 ? 'Placa' : 'Extra ' + (i - 1); }
+  function tipoFoto(i) { return i === 0 ? 'Veículo' : i === 1 ? 'Placa' : i === 2 ? 'Placa descaract.' : 'Extra ' + (i - 2); }
   // placa: antiga com hífen (ABC-1234); Mercosul sem hífen (ABC1D23)
   function fmtPlaca(p) { p = String(p || '').toUpperCase(); return /^[A-Z]{3}\d{4}$/.test(p) ? p.slice(0, 3) + '-' + p.slice(3) : p; }
   function ehMercosul(p) { return /^[A-Z]{3}\d[A-Z]\d{2}$/.test(String(p || '').toUpperCase()); }
@@ -821,7 +821,7 @@
     $('btnCamConfirmar').textContent = '';
     $('btnCamConfirmar').appendChild(document.createTextNode(st.camFotos.length ? 'Salvar ' + plural(st.camFotos.length, 'foto', 'fotos') : 'Salvar'));
     const ps = $('camPassos'); ps.textContent = '';
-    [['Veículo inteiro', 1], ['Placa inutilizada', 2]].forEach(function (pa) {
+    [['Veículo inteiro', 1], ['Placa inteira', 2], ['Placa descaract.', 3]].forEach(function (pa) {
       const ok = st.camFotos.length >= pa[1];
       const agora = st.camFotos.length === pa[1] - 1;
       const d = el('div', ok ? 'feito' : (agora ? 'agora' : '')); d.appendChild(ic(ok ? 'check' : (agora ? 'camera' : 'pendente'), 'p')); d.appendChild(document.createTextNode((agora ? 'Agora: ' : pa[1] + '. ') + pa[0]));

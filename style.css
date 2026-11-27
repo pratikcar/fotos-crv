@@ -718,3 +718,4 @@ html { scrollbar-gutter: stable; }
 .marca-login .marca-logo { width: 56px; height: 56px; border-radius: 14px; background: #fff; padding: 3px; border: 1px solid var(--borda); object-fit: contain; }
 .gestor .topo img.marca { width: 34px; height: 34px; border-radius: 9px; background: #fff; padding: 2px; object-fit: contain; }
 .logo-login { display: block; width: 140px; height: 140px; margin: 0 auto 8px; object-fit: contain; }
+#camPassos > div { white-space: normal; line-height: 1.2; }

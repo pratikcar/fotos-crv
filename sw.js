@@ -1,5 +1,5 @@
 // Service worker: deixa o app abrir sem internet e envia fotos em segundo plano.
-const CACHE = 'fotos-patio-v1.1.7';
+const CACHE = 'fotos-patio-v1.1.8';
 const ARQUIVOS = [
   './', './index.html', './campo.js', './style.css', './config.js', './sync-core.js',
   './manifest.webmanifest', './icon-192.png', './icon-512.png', './icones.js',
