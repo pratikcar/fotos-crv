@@ -714,3 +714,7 @@ html { scrollbar-gutter: stable; }
 #listaPatios .nome-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 #listaPatios .pct { font-weight: 900; font-size: 22px; color: var(--primaria); font-variant-numeric: tabular-nums; }
 #listaPatios .pct.completo { color: var(--verde); }
+/* logo Pratik-Car */
+.marca-login .marca-logo { width: 56px; height: 56px; border-radius: 14px; background: #fff; padding: 3px; border: 1px solid var(--borda); object-fit: contain; }
+.gestor .topo img.marca { width: 34px; height: 34px; border-radius: 9px; background: #fff; padding: 2px; object-fit: contain; }
+.logo-login { display: block; width: 140px; height: 140px; margin: 0 auto 8px; object-fit: contain; }
