@@ -90,7 +90,7 @@
     { campo: 'cor', nomes: ['COR'], rotulo: 'COR', nivel: 'aviso' },
     { campo: 'chassi', nomes: ['CHASSI'], rotulo: 'CHASSI', nivel: 'aviso' },
     { campo: 'uf', nomes: ['UF'], rotulo: 'UF', nivel: 'info' },
-    { campo: 'motivo', nomes: ['DT DESCARACTERIZACAO'], rotulo: 'Motivo do NÃO DESTINAR', nivel: 'info' }
+    { campo: 'motivo', nomes: ['DT DESCARACTERIZACAO'], rotulo: 'Motivo do NÃO DESTINAR (coluna DT DESCARACTERIZAÇÃO)', nivel: 'info' }
   ];
   const PORTE_CONHECIDO = /MOTO|GERAL|CARRO|AUTOMOVEL|PESADO|CAMINH|ONIBUS|BICICLETA|REBOQUE|TRATOR|UTILITARIO/;
 
@@ -164,7 +164,7 @@
       avisos.push('Mais da metade dos veículos está sem placa — confira se a coluna PLACA está certa.');
     }
     const reboques = veiculos.filter(function (v) { return norm(v.modelo).indexOf('REBOQUE') >= 0; }).length;
-    if (reboques) infos.push(reboques + ' reboque(s) identificado(s) pelo modelo — vão para "Outros".');
+    if (reboques) infos.push((reboques === 1 ? '1 reboque identificado' : reboques + ' reboques identificados') + ' pelo modelo — vão para "Outros".');
     if (veiculos.length && !veiculos.some(function (v) { return v.naoDestinar; })) {
       avisos.push('Nenhum veículo NÃO DESTINAR foi encontrado. Se a lista tiver algum, a marcação está num formato diferente.');
     }

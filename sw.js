@@ -1,14 +1,17 @@
 // Service worker: deixa o app abrir sem internet e envia fotos em segundo plano.
-const CACHE = 'fotos-patio-v1.0.9';
+const CACHE = 'fotos-patio-v1.1.0';
 const ARQUIVOS = [
   './', './index.html', './campo.js', './style.css', './config.js', './sync-core.js',
-  './manifest.webmanifest', './icon-192.png', './icon-512.png'
+  './manifest.webmanifest', './icon-192.png', './icon-512.png', './icones.js'
 ];
 
 importScripts('./config.js', './sync-core.js');
 
+// Todos os arquivos de uma versão entram juntos num cache próprio (nunca mistura versões).
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ARQUIVOS); }).then(function () { return self.skipWaiting(); }));
+  e.waitUntil(caches.open(CACHE).then(function (c) {
+    return c.addAll(ARQUIVOS.map(function (u) { return new Request(u, { cache: 'reload' }); }));
+  }).then(function () { return self.skipWaiting(); }));
 });
 
 self.addEventListener('activate', function (e) {
@@ -23,13 +26,10 @@ self.addEventListener('fetch', function (e) {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // API não passa pelo cache
   if (url.pathname.endsWith('/gestor.html') || url.pathname.endsWith('/gestor.js')) return; // página de gestão é só online
+  // só do cache desta versão; o que não estiver nele vem da rede (sem gravar por cima)
   e.respondWith(
-    caches.match(req, { ignoreSearch: true }).then(function (cache) {
-      const rede = fetch(req).then(function (resp) {
-        if (resp && resp.ok) { const copia = resp.clone(); caches.open(CACHE).then(function (c) { c.put(req, copia); }); }
-        return resp;
-      }).catch(function () { return cache; });
-      return cache || rede;
+    caches.open(CACHE).then(function (c) {
+      return c.match(req, { ignoreSearch: true }).then(function (r) { return r || fetch(req); });
     })
   );
 });

@@ -68,6 +68,7 @@
   document.querySelectorAll('.abas button').forEach(function (b) { b.addEventListener('click', function () { trocarAba(b.dataset.aba); }); });
   function trocarAba(id) {
     fecharGaveta();
+    document.querySelectorAll('.toast').forEach(function (x) { x.remove(); });
     ['abaLotes', 'abaNovo', 'abaUsuarios', 'abaConta'].forEach(function (a) { $(a).classList.toggle('oculto', a !== id); });
     document.querySelectorAll('.abas button').forEach(function (b) { b.classList.toggle('ativo', b.dataset.aba === id); });
     if (id === 'abaLotes') carregarLotes();
@@ -77,13 +78,67 @@
   // ---------- pátios (layout D: escolher pátio → painel com indicadores, tabela e gaveta) ----------
   $('btnRecarregar').addEventListener('click', function () { carregarLotes(); });
   $('btnFecharGaveta').addEventListener('click', fecharGaveta);
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !document.querySelector('.modal-fundo')) fecharGaveta(); });
+  document.addEventListener('keydown', function (e) {
+    if (document.querySelector('.modal-fundo')) return;
+    if (e.key === 'Escape') fecharGaveta();
+    const digitando = /INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName || '');
+    if (!digitando && $('gavetaConteudo').dataset.painel === 'veiculo' && st.navGaveta) {
+      if (e.key === 'ArrowRight') st.navGaveta(1);
+      if (e.key === 'ArrowLeft') st.navGaveta(-1);
+    }
+  });
   st.lotes = []; st.minis = {};
   st.loteSel = (function () { try { return localStorage.getItem('fotosCrvPatio'); } catch (e) { return null; } })();
   const norm = function (t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
   const ehAdmin = function () { return st.sessao && st.sessao.papel === 'admin'; };
   const CAT = { carros: 'Carros', motos: 'Motos', outros: 'Outros' };
-  function vazio(box, texto) { box.textContent = ''; box.appendChild(el('p', 'vazio', texto)); }
+  function toast(msg) {
+    document.querySelectorAll('.toast').forEach(function (x) { x.remove(); });
+    const t = el('div', 'toast'); t.appendChild(ic('check', 'p')); t.appendChild(document.createTextNode(' ' + msg)); t.setAttribute('role', 'status'); document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 3000);
+  }
+  // confirmação própria (no lugar do confirm() do navegador)
+  function confirmar(titulo, texto, rotulo, perigo) {
+    return new Promise(function (ok) {
+      const fundo = el('div', 'modal-fundo'); const m = el('div', 'modal'); m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true');
+      m.appendChild(el('h2', null, titulo));
+      String(texto).split('\n').filter(Boolean).forEach(function (p) { m.appendChild(el('p', null, p)); });
+      const linha = el('div', 'linha-btns');
+      const sim = botao('btn pequeno ' + (perigo ? 'vermelho' : ''), perigo ? 'lixo' : 'check', rotulo);
+      const nao = botao('btn pequeno cinza', null, 'Cancelar');
+      const fim = function (v) { fundo.remove(); document.removeEventListener('keydown', esc, true); ok(v); };
+      const esc = function (e) { if (e.key === 'Escape') { e.stopPropagation(); fim(false); } };
+      sim.addEventListener('click', function () { fim(true); }); nao.addEventListener('click', function () { fim(false); });
+      fundo.addEventListener('click', function (e) { if (e.target === fundo) fim(false); });
+      document.addEventListener('keydown', esc, true);
+      linha.appendChild(sim); linha.appendChild(nao); m.appendChild(linha); fundo.appendChild(m); document.body.appendChild(fundo);
+      nao.focus();
+    });
+  }
+  document.querySelectorAll('.ver-senha').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const i = $(b.dataset.alvo); const ver = i.type === 'password'; i.type = ver ? 'text' : 'password';
+      b.setAttribute('aria-label', ver ? 'Esconder senha' : 'Mostrar senha'); b.textContent = ''; b.appendChild(ic(ver ? 'olhofechado' : 'olho'));
+    });
+  });
+  function plural(n, um, varios) { return n + ' ' + (n === 1 ? um : varios); }
+  function vazio(box, texto, icone) { box.textContent = ''; const v = el('div', 'vazio'); if (icone) v.appendChild(ic(icone)); v.appendChild(el('div', null, texto)); box.appendChild(v); }
+  function botao(cls, icone, texto) { const b = el('button', cls); if (icone) b.appendChild(ic(icone, 'p')); b.appendChild(document.createTextNode(texto)); return b; }
+  function etiqueta(k) { const r = ROTULO[k]; const t = el('span', 'tag ' + r[0]); t.appendChild(ic(r[2])); t.appendChild(document.createTextNode(r[1])); return t; }
+  function anel(feitos, total) {
+    const pct = total ? Math.round(100 * feitos / total) : 0;
+    const a = el('div', 'anel'); a.style.setProperty('--p', pct); a.appendChild(el('span', null, pct + '%'));
+    a.setAttribute('aria-label', pct + '% fotografado'); return a;
+  }
+  // placa: antiga com hífen (ABC-1234); Mercosul sem hífen (ABC1D23)
+  function fmtPlaca(p) { p = String(p || '').toUpperCase(); return /^[A-Z]{3}\d{4}$/.test(p) ? p.slice(0, 3) + '-' + p.slice(3) : p; }
+  function ehMercosul(p) { return /^[A-Z]{3}\d[A-Z]\d{2}$/.test(String(p || '').toUpperCase()); }
+  function placaVis(placa, uf, peq) {
+    const p = el('div', 'placa-vis' + (peq ? ' peq' : '') + (placa ? (ehMercosul(placa) ? ' mercosul' : '') : ' sem'));
+    p.appendChild(el('b', null, placa ? fmtPlaca(placa) : 'sem placa'));
+    if (uf) p.title = 'UF ' + uf;
+    return p;
+  }
   function guardarPatio(id) { st.loteSel = id; try { if (id) localStorage.setItem('fotosCrvPatio', id); else localStorage.removeItem('fotosCrvPatio'); } catch (e) { /* sem armazenamento */ } }
   function mostrarGaveta() { $('gaveta').classList.remove('oculto'); document.body.classList.add('com-gaveta'); }
   function fecharGaveta() {
@@ -112,19 +167,28 @@
 
   function desenharPatios() {
     const box = $('listaLotes'); box.textContent = '';
-    if (!st.lotes.length) { vazio(box, 'Nenhum pátio ainda. Use "+ Novo pátio" para enviar a planilha.'); return; }
-    const ordem = st.lotes.slice().sort(function (a, b) { return (b.ativo ? 1 : 0) - (a.ativo ? 1 : 0); });
+    if (!st.lotes.length) { vazio(box, 'Nenhum pátio ainda. Use "Novo pátio (Excel)" para enviar a planilha.', 'planilha'); return; }
+    const ordem = st.lotes.slice().sort(function (a, b) { return ((b.ativo ? 1 : 0) - (a.ativo ? 1 : 0)) || (b.naoBaixadas - a.naoBaixadas); });
     let titEncerrados = false;
+    if (ordem[0] && ordem[0].ativo) box.appendChild(el('div', 'col-sub', 'Ativos'));
     ordem.forEach(function (l) {
       if (!l.ativo && !titEncerrados) { box.appendChild(el('div', 'col-sub', 'Encerrados')); titEncerrados = true; }
       const b = el('button', 'patio-item' + (l.ativo ? '' : ' encerrado') + (l.loteId === st.loteSel ? ' sel' : ''));
       b.dataset.lote = l.loteId;
-      b.appendChild(el('div', 'nome', l.patio));
-      b.appendChild(el('div', 'info', (l.numeroLote ? 'Lista ' + l.numeroLote + ' · ' : '') + (l.ativo ? l.fotografados + ' de ' + l.destinaveis + ' fotografados' : 'encerrado · ' + l.fotos + ' foto(s)')));
-      const barra = el('div', 'barra'); const p = el('div');
-      p.style.width = (l.destinaveis ? Math.round(100 * l.fotografados / l.destinaveis) : 0) + '%';
-      barra.appendChild(p); b.appendChild(barra);
-      if (l.naoBaixadas) b.appendChild(el('span', 'tag azul', l.naoBaixadas + ' foto(s) nova(s)'));
+      const icb = el('div', 'kpi-ic'); icb.appendChild(ic('pin')); b.appendChild(icb);
+      const corpo = el('div', 'corpo');
+      const pct = l.destinaveis ? Math.round(100 * l.fotografados / l.destinaveis) : 0;
+      const ln = el('div', 'nome-linha'); ln.appendChild(el('div', 'nome', l.patio)); ln.appendChild(el('span', 'pct', pct + '%')); corpo.appendChild(ln);
+      corpo.appendChild(el('div', 'info', (l.numeroLote ? 'Lista ' + l.numeroLote + ' · ' : '') + 'criado em ' + data(l.criadoEm).split(',')[0]));
+      const pr = el('div', 'progresso-txt'); pr.appendChild(el('b', null, l.fotografados + ' de ' + l.destinaveis)); pr.appendChild(document.createTextNode(' fotografados · ' + plural(l.fotos, 'foto', 'fotos')));
+      corpo.appendChild(pr);
+      const barraP = el('div', 'barra'); const bpp = el('div'); bpp.style.width = (l.destinaveis ? Math.max(l.fotografados ? 2 : 0, Math.round(100 * l.fotografados / l.destinaveis)) : 0) + '%'; barraP.appendChild(bpp); corpo.appendChild(barraP);
+      const tags = el('div', 'linha-btns'); tags.style.marginTop = '2px';
+      const te = el('span', 'tag ' + (l.ativo ? 'verde' : '')); te.appendChild(l.ativo ? el('span', 'ponto') : ic('cadeado')); te.appendChild(document.createTextNode(l.ativo ? 'Ativo' : 'Encerrado')); tags.appendChild(te);
+      if (l.naoBaixadas) { const tn = el('span', 'tag azul'); tn.appendChild(ic('download')); tn.appendChild(document.createTextNode(plural(l.naoBaixadas, 'foto nova para baixar', 'fotos novas para baixar'))); tags.appendChild(tn); }
+      corpo.appendChild(tags);
+      b.appendChild(corpo);
+      b.appendChild(ic('seta'));
       b.addEventListener('click', function () { st.escolhendo = false; guardarPatio(l.loteId); abrirPatio(l); });
       box.appendChild(b);
     });
@@ -135,7 +199,7 @@
     if (v.foraDaLista) return 'fora';
     return v.fotos ? 'fotografado' : 'pendente';
   }
-  const ROTULO = { bloq: ['vermelho', 'NÃO DESTINAR'], fora: ['amarelo', 'fora da lista'], fotografado: ['verde', 'fotografado'], pendente: ['', 'pendente'] };
+  const ROTULO = { bloq: ['vermelho', 'NÃO DESTINAR', 'bloq'], fora: ['amarelo', 'Fora da lista', 'alerta'], fotografado: ['verde', 'Fotografado', 'check'], pendente: ['', 'Pendente', 'pendente'] };
 
   async function abrirPatio(l) {
     const mudou = st.patioAberto !== l.loteId;
@@ -155,10 +219,10 @@
 
     // linha fina do pátio escolhido (a lista de pátios fica escondida)
     const faixa = el('div', 'faixa-patio');
-    faixa.appendChild(el('span', 'faixa-nome', '📍 ' + l.patio));
-    faixa.appendChild(el('span', 'suave', (l.numeroLote ? 'Lista ' + l.numeroLote + ' · ' : '') + 'criado em ' + data(l.criadoEm)));
-    faixa.appendChild(el('span', 'tag ' + (l.ativo ? 'verde' : ''), l.ativo ? 'ativo' : 'encerrado'));
-    const bTrocar = el('button', 'btn pequeno cinza', '⇄ Trocar pátio');
+    const fn = el('span', 'faixa-nome'); fn.appendChild(ic('pin')); fn.appendChild(document.createTextNode(l.patio)); faixa.appendChild(fn);
+    const te = el('span', 'tag ' + (l.ativo ? 'verde' : '')); te.appendChild(l.ativo ? el('span', 'ponto') : ic('cadeado')); te.appendChild(document.createTextNode(l.ativo ? 'Ativo' : 'Encerrado')); faixa.appendChild(te);
+    faixa.appendChild(el('span', 'meta', (l.numeroLote ? 'Lista ' + l.numeroLote + ' · ' : '') + 'criado em ' + data(l.criadoEm)));
+    const bTrocar = botao('btn pequeno cinza', 'trocar', 'Trocar pátio');
     bTrocar.addEventListener('click', function () { desenharPatios(); mostrarSeletor(); });
     faixa.appendChild(bTrocar);
     pp.appendChild(faixa);
@@ -167,54 +231,88 @@
     const acoes = el('div', 'linha-btns acoes-patio');
     const status = el('div', 'suave status-patio');
     const det = $('gavetaConteudo');
-    const bBaixar = el('button', 'btn pequeno verde', '⬇ Baixar fotos' + (l.naoBaixadas ? ' (' + l.naoBaixadas + ' novas)' : ''));
+    const bBaixar = botao('btn pequeno verde', 'download', 'Baixar fotos' + (l.naoBaixadas ? ' (' + l.naoBaixadas + ' novas)' : ''));
     bBaixar.disabled = !l.fotos;
     bBaixar.addEventListener('click', function () { marcarLinha(null); painelBaixar(l, det, status); });
-    const bEditar = el('button', 'btn pequeno cinza', '✏️ Editar pátio');
+    const bEditar = botao('btn pequeno cinza', 'editar', 'Editar pátio');
     bEditar.addEventListener('click', function () { marcarLinha(null); painelEditar(l, det); });
-    const bAtivo = el('button', 'btn pequeno ' + (l.ativo ? 'vermelho' : 'cinza'), l.ativo ? 'Encerrar' : 'Reabrir');
+    const bAtivo = botao('btn pequeno ' + (l.ativo ? 'contorno-vermelho' : 'cinza'), l.ativo ? 'cadeado' : 'aberto', l.ativo ? 'Encerrar pátio' : 'Reabrir pátio');
     bAtivo.addEventListener('click', async function () {
-      if (l.ativo && !confirm('Encerrar o pátio ' + l.patio + (l.numeroLote ? ' (lista ' + l.numeroLote + ')' : '') + '? Ele some do app de campo. Fotos já guardadas no celular ainda serão enviadas.')) return;
+      mais.open = false;
+      if (l.ativo && !(await confirmar('Encerrar o pátio ' + l.patio + '?', 'Ele some do app de campo.\nFotos já guardadas nos celulares ainda serão enviadas.', 'Encerrar pátio', true))) return;
       try { await api('definirAtivo', { loteId: l.loteId, ativo: !l.ativo }); carregarLotes(); } catch (e) { alert(e.message); }
     });
-    [bBaixar, bEditar, bAtivo].forEach(function (b) { acoes.appendChild(b); });
-    if (!l.ativo) {
-      const bExcluir = el('button', 'btn pequeno vermelho', '🗑 Excluir pátio');
-      bExcluir.addEventListener('click', function () { marcarLinha(null); painelExcluir(l, det); });
-      acoes.appendChild(bExcluir);
-    }
+    [bBaixar, bEditar].forEach(function (b) { acoes.appendChild(b); });
+    // ações raras/destrutivas ficam num menu separado
+    const mais = el('details', 'menu-mais');
+    const sm = el('summary', 'btn pequeno cinza'); sm.appendChild(ic('pontos', 'p')); sm.appendChild(document.createTextNode('Mais ações')); mais.appendChild(sm);
+    const itens = el('div', 'itens'); mais.appendChild(itens);
+    bAtivo.className = 'btn pequeno';
+    itens.appendChild(bAtivo);
+    const bExcluir = botao('btn pequeno perigo', 'lixo', 'Excluir pátio');
+    if (l.ativo) { bExcluir.appendChild(el('small', 'dica', 'Encerre o pátio antes')); bExcluir.title = 'Encerre o pátio antes de excluir'; }
+    bExcluir.disabled = l.ativo;
+    bExcluir.addEventListener('click', function () { mais.open = false; marcarLinha(null); painelExcluir(l, det); });
+    itens.appendChild(bExcluir);
     if (ehAdmin()) {
-      const bReset = el('button', 'btn pequeno vermelho', '♻ Resetar pátio');
-      bReset.title = 'Só admin';
-      bReset.addEventListener('click', function () { marcarLinha(null); painelResetar(l, det); });
-      acoes.appendChild(bReset);
+      itens.appendChild(el('div', 'sep-menu', 'Só administrador'));
+      const bReset = botao('btn pequeno perigo', 'resetar', 'Resetar pátio');
+      bReset.title = 'Só administrador: zera as fotos do pátio';
+      bReset.addEventListener('click', function () { mais.open = false; marcarLinha(null); painelResetar(l, det); });
+      itens.appendChild(bReset);
     }
+    document.addEventListener('click', function (e) { if (mais.open && !mais.contains(e.target)) mais.open = false; });
+    acoes.appendChild(mais);
     pp.appendChild(acoes); pp.appendChild(status);
 
     // indicadores (clicar filtra a tabela)
     const cont = { todos: vs.length, pendente: 0, fotografado: 0, bloq: 0, fora: 0 };
     vs.forEach(function (v) { cont[situacao(v)]++; });
     st.filtro = st.filtro || (cont.fotografado ? 'fotografado' : 'pendente');
+    // progresso geral do pátio
+    const dest = vs.filter(function (v) { return !v.naoDestinar && !v.foraDaLista; }).length;
+    const prog = el('div', 'progresso-patio');
+    const pl = el('div', 'linha');
+    const pct = dest ? Math.round(100 * cont.fotografado / dest) : 0;
+    const pb = el('b', null, pct + '% fotografado'); pl.appendChild(pb);
+    pl.appendChild(el('span', 'suave', cont.fotografado + ' de ' + dest + ' veículos para fotografar · ' + plural(l.fotos, 'foto recebida', 'fotos recebidas')));
+    prog.appendChild(pl);
+    const barraP = el('div', 'barra'); const bp = el('div'); bp.style.width = pct + '%'; barraP.appendChild(bp); prog.appendChild(barraP);
+    pp.appendChild(prog);
+    pp.appendChild(el('div', 'rotulo-filtro', 'Filtrar por situação'));
     const kpis = el('div', 'kpis');
-    const KPI = [['pendente', 'Pendentes', ''], ['fotografado', 'Fotografados', 'verde'], ['bloq', 'Não destinar', 'vermelho'], ['fora', 'Fora da lista', 'amarelo'], ['todos', 'Todos', '']];
+    const KPI = [['pendente', 'Pendentes', '', 'pendente'], ['fotografado', 'Fotografados', 'verde', 'check'], ['bloq', 'NÃO DESTINAR', 'vermelho', 'bloq'], ['fora', 'Fora da lista', 'amarelo', 'alerta'], ['todos', 'Todos', '', 'lista']];
     KPI.forEach(function (k) {
       if (k[0] === 'fora' && !cont.fora) return;
       const b = el('button', 'kpi ' + k[2] + (st.filtro === k[0] ? ' ativo' : ''));
       b.dataset.filtro = k[0];
+      b.setAttribute('aria-pressed', st.filtro === k[0] ? 'true' : 'false');
+      const ki = el('div', 'kpi-ic'); ki.appendChild(ic(k[3])); b.appendChild(ki);
       b.appendChild(el('div', 'kpi-rot', k[1])); b.appendChild(el('div', 'kpi-num', String(cont[k[0]])));
-      b.addEventListener('click', function () { st.filtro = k[0]; kpis.querySelectorAll('.kpi[data-filtro]').forEach(function (x) { x.classList.toggle('ativo', x === b); }); desenhar(); });
+      b.addEventListener('click', function () { st.filtro = k[0]; kpis.querySelectorAll('.kpi[data-filtro]').forEach(function (x) { x.classList.toggle('ativo', x === b); x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); desenhar(); });
       kpis.appendChild(b);
     });
     const kNovas = el('button', 'kpi azul');
-    kNovas.appendChild(el('div', 'kpi-rot', 'Fotos não baixadas')); kNovas.appendChild(el('div', 'kpi-num', String(l.naoBaixadas)));
+    const kni = el('div', 'kpi-ic'); kni.appendChild(ic('download')); kNovas.appendChild(kni);
+    kNovas.className = 'kpi azul kpi-novas'; kNovas.appendChild(el('div', 'kpi-rot', 'Para baixar')); kNovas.appendChild(el('div', 'kpi-num', String(l.naoBaixadas)));
     kNovas.title = 'Abrir "Baixar fotos"';
     kNovas.addEventListener('click', function () { if (l.fotos) { marcarLinha(null); painelBaixar(l, det, status); } });
     kpis.appendChild(kNovas);
     pp.appendChild(kpis);
 
-    const busca = el('input', 'busca-tabela'); busca.type = 'search'; busca.placeholder = 'Buscar NRO, placa ou modelo'; busca.value = st.busca || '';
+    const bt = el('div', 'barra-tabela');
+    const cb = el('div', 'campo-busca'); cb.appendChild(ic('busca'));
+    const busca = el('input', 'busca-tabela'); busca.type = 'search'; busca.placeholder = 'Buscar NRO, placa ou modelo'; busca.value = st.busca || ''; busca.setAttribute('aria-label', 'Buscar veículo');
     busca.addEventListener('input', function () { st.busca = busca.value; desenhar(); });
-    pp.appendChild(busca);
+    cb.appendChild(busca); bt.appendChild(cb);
+    const selCat = el('select', 'filtro-cat'); selCat.setAttribute('aria-label', 'Categoria');
+    [['', 'Todas as categorias'], ['carros', 'Carros'], ['motos', 'Motos'], ['outros', 'Outros']].forEach(function (o) { const op = el('option', null, o[1]); op.value = o[0]; selCat.appendChild(op); });
+    selCat.value = st.cat || '';
+    selCat.addEventListener('change', function () { st.cat = selCat.value; desenhar(); });
+    bt.appendChild(selCat);
+    const contagem = el('span', 'contagem'); bt.appendChild(contagem);
+    pp.appendChild(bt);
+    st.ordem = st.ordem || { col: 'nro', dir: 1 };
     const wrap = el('div', 'tabela-wrap'); pp.appendChild(wrap);
     const tab = el('table', 'tabela-veiculos'); wrap.appendChild(tab);
 
@@ -227,29 +325,62 @@
     function desenhar() {
       tab.textContent = '';
       const cab = el('tr');
-      ['NRO', 'Placa', 'Veículo', 'Categoria', 'Fotos', 'Situação'].forEach(function (c) { cab.appendChild(el('th', null, c)); });
+      const COLS = [['nro', 'NRO'], ['placa', 'Placa'], ['modelo', 'Veículo'], ['categoria', 'Categoria'], ['fotos', 'Fotos'], ['sit', 'Situação']];
+      COLS.forEach(function (c) {
+        const th = el('th'); const b = el('button', null, c[1]);
+        if (st.ordem.col === c[0]) { b.appendChild(document.createTextNode(st.ordem.dir > 0 ? ' ▲' : ' ▼')); th.setAttribute('aria-sort', st.ordem.dir > 0 ? 'ascending' : 'descending'); }
+        else b.appendChild(ic('ordenar'));
+        b.title = 'Ordenar por ' + c[1];
+        b.addEventListener('click', function () { st.ordem = { col: c[0], dir: st.ordem.col === c[0] ? -st.ordem.dir : 1 }; desenhar(); });
+        th.appendChild(b); cab.appendChild(th);
+      });
+      cab.appendChild(el('th', 'td-seta'));
       tab.appendChild(cab);
       const q = norm(busca.value.trim());
+      const nf = function (v) { return (st.ctx.fotosPorNro[v.nro] || []).length; };
+      const ORD_SIT = { pendente: 0, fora: 1, fotografado: 2, bloq: 3 };
+      const chave = function (v) {
+        const c = st.ordem.col;
+        if (c === 'nro') return Number(v.nro);
+        if (c === 'fotos') return nf(v);
+        if (c === 'sit') return ORD_SIT[situacao(v)];
+        return norm(v[c]);
+      };
       let n = 0;
-      vs.slice().sort(function (a, b) { return Number(a.nro) - Number(b.nro); }).forEach(function (v) {
+      st.ctx.visiveis = [];
+      vs.slice().sort(function (a, b) {
+        const x = chave(a), y = chave(b);
+        return (x < y ? -1 : x > y ? 1 : Number(a.nro) - Number(b.nro)) * st.ordem.dir;
+      }).forEach(function (v) {
         const k = situacao(v);
         if (st.filtro !== 'todos' && k !== st.filtro) return;
+        if (st.cat && v.categoria !== st.cat) return;
         if (q && norm(v.nro + ' ' + v.placa + ' ' + v.modelo + ' ' + v.cor).indexOf(q) < 0) return;
         n++;
+        st.ctx.visiveis.push(v);
         const tr = el('tr', v.nro === st.nroSel ? 'sel' : '');
         tr.dataset.nro = v.nro; tr.tabIndex = 0;
         tr.appendChild(el('td', 'td-nro', v.nro));
-        tr.appendChild(el('td', null, v.placa ? v.placa + (v.uf ? ' · ' + v.uf : '') : '—'));
+        const tdp = el('td'); tdp.appendChild(placaVis(v.placa, v.uf, true)); tr.appendChild(tdp);
         tr.appendChild(el('td', null, [v.modelo, v.cor].filter(Boolean).join(' · ') || '—'));
-        tr.appendChild(el('td', null, CAT[v.categoria] || v.categoria));
-        tr.appendChild(el('td', null, String((st.ctx.fotosPorNro[v.nro] || []).length)));
-        const td = el('td'); td.appendChild(el('span', 'tag ' + ROTULO[k][0], ROTULO[k][1])); tr.appendChild(td);
+        const tdc = el('td'); const sc = el('span', 'td-fotos'); sc.appendChild(ic(v.categoria === 'motos' ? 'moto' : v.categoria === 'carros' ? 'carro' : 'outros', 'p')); sc.appendChild(document.createTextNode(CAT[v.categoria] || v.categoria)); tdc.appendChild(sc); tr.appendChild(tdc);
+        const tdf = el('td'); const sf = el('span', 'td-fotos'); sf.appendChild(ic('foto', 'p')); sf.appendChild(document.createTextNode(String(nf(v)))); tdf.appendChild(sf); tr.appendChild(tdf);
+        const td = el('td'); td.appendChild(etiqueta(k)); tr.appendChild(td);
+        const ts = el('td', 'td-seta'); ts.appendChild(ic('seta', 'p')); tr.appendChild(ts);
         const abrir = function () { marcarLinha(v.nro); abrirVeiculo(v); };
         tr.addEventListener('click', abrir);
         tr.addEventListener('keydown', function (e) { if (e.key === 'Enter') abrir(); });
         tab.appendChild(tr);
       });
-      if (!n) { const tr = el('tr'); const td = el('td', 'vazio', 'Nenhum veículo neste filtro.'); td.colSpan = 6; tr.appendChild(td); tab.appendChild(tr); }
+      const NOMEF = { pendente: 'Pendentes', fotografado: 'Fotografados', bloq: 'NÃO DESTINAR', fora: 'Fora da lista', todos: 'Todos' };
+      contagem.textContent = 'Mostrando ' + plural(n, 'veículo', 'veículos');
+      if (st.filtro !== 'todos' || st.cat) {
+        const chip = botao('btn pequeno chip-filtro', 'x', 'Filtro: ' + (st.filtro !== 'todos' ? NOMEF[st.filtro] : '') + (st.filtro !== 'todos' && st.cat ? ' · ' : '') + (st.cat ? CAT[st.cat] : ''));
+        chip.title = 'Limpar filtro';
+        chip.addEventListener('click', function () { st.filtro = 'todos'; st.cat = ''; selCat.value = ''; kpis.querySelectorAll('.kpi[data-filtro]').forEach(function (x) { x.classList.toggle('ativo', x.dataset.filtro === 'todos'); }); desenhar(); });
+        contagem.appendChild(document.createTextNode(' ')); contagem.appendChild(chip);
+      }
+      if (!n) { const tr = el('tr'); const td = el('td', 'vazio', 'Nenhum veículo neste filtro.'); td.colSpan = 7; tr.appendChild(td); tab.appendChild(tr); }
     }
     desenhar();
     if (st.nroSel && $('gavetaConteudo').dataset.painel === 'veiculo') {
@@ -272,13 +403,34 @@
     const box = $('gavetaConteudo');
     box.textContent = ''; box.dataset.painel = 'veiculo';
     mostrarGaveta();
+    const lista = st.ctx.visiveis || [];
+    const idx = lista.findIndex(function (x) { return x.nro === v.nro; });
+    const nav = el('div', 'nav-gaveta');
+    const irPara = function (d) { const alvo = lista[idx + d]; if (alvo) { st.ctx.marcarLinha(alvo.nro); abrirVeiculo(alvo); } };
+    const bAnt = botao('btn pequeno cinza', 'anterior', 'Anterior'); bAnt.disabled = idx <= 0; bAnt.addEventListener('click', function () { irPara(-1); });
+    const bPro = botao('btn pequeno cinza', 'seta', 'Próximo'); bPro.disabled = idx < 0 || idx >= lista.length - 1; bPro.addEventListener('click', function () { irPara(1); });
+    bAnt.title = 'Veículo anterior (seta ←)'; bPro.title = 'Próximo veículo (seta →)';
+    nav.appendChild(bAnt);
+    if (idx >= 0) nav.appendChild(el('span', 'nav-pos', (idx + 1) + ' de ' + lista.length));
+    nav.appendChild(bPro);
+    const resumo = el('div', 'nav-resumo'); resumo.appendChild(el('b', null, 'NRO ' + v.nro)); resumo.appendChild(placaVis(v.placa, v.uf, true));
+    resumo.classList.add('oculto');
+    nav.appendChild(resumo); box.appendChild(nav);
+    setTimeout(function () {
+      const alvoCab = box.querySelector('.veiculo-cab .placa-vis') || box.querySelector('.veiculo-cab h2');
+      if (!alvoCab || !('IntersectionObserver' in window)) return;
+      const alt = nav.getBoundingClientRect().height || 68;
+      new IntersectionObserver(function (es) { resumo.classList.toggle('oculto', es[0].isIntersecting); }, { root: $('gaveta'), rootMargin: '-' + Math.round(alt) + 'px 0px 0px 0px', threshold: 0 }).observe(alvoCab);
+    }, 0);
+    st.navGaveta = irPara;
     const k = situacao(v);
     const cab = el('div', 'veiculo-cab');
     const t = el('h2', null, 'NRO ' + v.nro + ' ');
-    t.appendChild(el('span', 'tag ' + ROTULO[k][0], ROTULO[k][1]));
+    t.appendChild(etiqueta(k));
     cab.appendChild(t);
-    cab.appendChild(el('div', 'placa-grande', v.placa ? v.placa + (v.uf ? ' · ' + v.uf : '') : (v.foraDaLista ? 'Fora da lista' : 'Sem placa')));
-    cab.appendChild(el('div', 'suave', [v.modelo, v.cor, CAT[v.categoria], v.chassi ? 'chassi ' + v.chassi : ''].filter(Boolean).join(' · ')));
+    const lp = el('div', 'linha-btns'); lp.style.marginTop = '0'; lp.appendChild(placaVis(v.placa, v.uf)); if (v.uf) lp.appendChild(el('span', 'tag', 'UF ' + v.uf)); cab.appendChild(lp);
+    cab.appendChild(el('div', null, [v.modelo, v.cor].filter(Boolean).join(' · ') || 'Modelo não informado'));
+    cab.appendChild(el('div', 'suave', [CAT[v.categoria], v.chassi ? 'chassi ' + v.chassi : ''].filter(Boolean).join(' · ')));
     if (v.apagadasCampo) cab.appendChild(el('div', 'suave', v.apagadasCampo + ' foto(s) apagada(s) pelo campo — vão no .zip marcadas como _APAGADA-PELO-CAMPO'));
     box.appendChild(cab);
 
@@ -288,35 +440,45 @@
       st.fotoSel = fs.some(function (f) { return f.uuid === st.fotoSel; }) ? st.fotoSel : fs[0].uuid;
       const grande = el('img', 'foto-visor'); grande.alt = 'Foto selecionada'; grande.title = 'Clique para ampliar';
       box.appendChild(grande);
-      const legenda = el('div', 'suave'); box.appendChild(legenda);
+      const legenda = el('div', 'leg-gaveta'); box.appendChild(legenda);
       const tira = el('div', 'tira-fotos'); box.appendChild(tira);
-      const acoesFoto = el('div', 'linha-btns'); box.appendChild(acoesFoto);
-      const area = el('div', 'area-acao'); box.appendChild(area);
+      const grupoF = el('div', 'grupo-acoes'); grupoF.appendChild(el('h4', null, 'Esta foto'));
+      const acoesFoto = el('div', 'linha-btns'); acoesFoto.style.marginTop = '0'; grupoF.appendChild(acoesFoto);
+      const area = el('div', 'area-acao'); grupoF.appendChild(area);
+      box.appendChild(grupoF);
 
       const selecionar = function (f) {
         st.fotoSel = f.uuid;
         tira.querySelectorAll('img').forEach(function (i) { i.classList.toggle('sel', i.dataset.uuid === f.uuid); });
         const nome = String(f.caminho).split('/').pop();
-        legenda.textContent = 'Foto ' + (fs.indexOf(f) + 1) + ' de ' + fs.length + ' · ' + nome + (f.baixada ? ' · já baixada' : ' · ainda não baixada');
+        const ordem = Number((/_(\d+)/.exec(nome) || [])[1] || 0) - 1;
+        legenda.textContent = '';
+        legenda.appendChild(el('b', null, (ordem === 0 ? 'Veículo' : ordem === 1 ? 'Placa' : 'Extra') + ' · foto ' + (fs.indexOf(f) + 1) + ' de ' + fs.length));
+        const tb = el('span', 'tag ' + (f.baixada ? '' : 'azul')); tb.appendChild(ic(f.baixada ? 'check' : 'download')); tb.appendChild(document.createTextNode(f.baixada ? 'Já baixada' : 'Nova')); legenda.appendChild(tb);
+        legenda.appendChild(el('span', 'suave', nome + ' · clique na foto para ampliar'));
         grande.src = st.minis[f.uuid] || '';
         grande.onclick = function () { api('miniatura', { uuid: f.uuid, grande: true }).then(function (m) { ampliar('data:' + m.tipo + ';base64,' + m.base64); }).catch(function (e) { alert(e.message); }); };
         acoesFoto.textContent = ''; area.textContent = '';
-        const bEx = el('button', 'btn pequeno vermelho', '🗑 Excluir esta foto');
+        const bEx = botao('btn pequeno contorno-vermelho', 'lixo', 'Excluir foto');
         bEx.addEventListener('click', async function () {
           const ultima = fs.length === 1;
-          if (!confirm('Excluir a foto ' + nome + ' do NRO ' + v.nro + '?\n\nEla vai para a lixeira do Drive (30 dias).' + (ultima ? ' É a única foto: o NRO volta a ficar PENDENTE para o campo.' : ''))) return;
+          if (!(await confirmar('Excluir a foto ' + nome + '?', 'NRO ' + v.nro + '. Ela vai para a lixeira do Drive (recuperável por 30 dias).' + (ultima ? '\nÉ a única foto: o NRO volta a ficar PENDENTE para o campo.' : ''), 'Excluir foto', true))) return;
           bEx.disabled = true;
           try { await api('excluirFotoGestao', { uuid: f.uuid }); recarregarPatio(); }
           catch (e) { alert(e.message); bEx.disabled = false; }
         });
-        const bMov = el('button', 'btn pequeno cinza', '↪ Mover para outro NRO');
+        const bMov = botao('btn pequeno cinza', 'mover', 'Mover para outro NRO');
         bMov.addEventListener('click', function () { formMover(area, f, v); });
-        acoesFoto.appendChild(bEx); acoesFoto.appendChild(bMov);
+        bEx.classList.add('perigo-dir');
+        acoesFoto.appendChild(bMov); acoesFoto.appendChild(bEx);
       };
       fs.forEach(function (f) {
         const img = el('img'); img.alt = 'Miniatura ' + String(f.caminho).split('/').pop(); img.dataset.uuid = f.uuid;
         img.addEventListener('click', function () { selecionar(f); });
-        tira.appendChild(img);
+        const fig = el('figure', 'mini-fig'); fig.appendChild(img);
+        const ord = Number((/_(\d+)/.exec(String(f.caminho).split('/').pop()) || [])[1] || 0) - 1;
+        fig.appendChild(el('figcaption', null, ord === 0 ? 'Veículo' : ord === 1 ? 'Placa' : 'Extra'));
+        tira.appendChild(fig);
         const pronto = function (src) { img.src = src; if (st.fotoSel === f.uuid) grande.src = src; };
         if (st.minis[f.uuid]) pronto(st.minis[f.uuid]);
         else api('miniatura', { uuid: f.uuid }).then(function (m) { pronto(st.minis[f.uuid] = 'data:' + m.tipo + ';base64,' + m.base64); }).catch(function () { img.alt = 'não carregou'; });
@@ -325,16 +487,17 @@
     }
 
     // ações do veículo (gestão e admin)
-    box.appendChild(el('div', 'titulo-secao', 'Veículo'));
-    const av = el('div', 'linha-btns'); box.appendChild(av);
-    const areaV = el('div', 'area-acao'); box.appendChild(areaV);
-    const bEd = el('button', 'btn pequeno cinza', '✏️ Editar veículo');
+    const grupoV = el('div', 'grupo-acoes'); grupoV.appendChild(el('h4', null, 'Veículo'));
+    const av = el('div', 'linha-btns'); av.style.marginTop = '0'; grupoV.appendChild(av);
+    const areaV = el('div', 'area-acao'); grupoV.appendChild(areaV);
+    box.appendChild(grupoV);
+    const bEd = botao('btn pequeno cinza', 'editar', 'Editar veículo');
     bEd.addEventListener('click', function () { formEditarVeiculo(areaV, v); });
     av.appendChild(bEd);
     if (fs.length) {
-      const bRes = el('button', 'btn pequeno vermelho', '♻ Resetar NRO');
+      const bRes = botao('btn pequeno contorno-vermelho perigo-dir', 'resetar', 'Resetar NRO');
       bRes.addEventListener('click', async function () {
-        if (!confirm('Resetar o NRO ' + v.nro + '?\n\nAs ' + fs.length + ' foto(s) dele vão para a lixeira do Drive (30 dias) e ele volta a ficar PENDENTE para o campo.' + (v.foraDaLista ? '\nComo é um NRO fora da lista, ele sai da lista.' : ''))) return;
+        if (!(await confirmar('Resetar o NRO ' + v.nro + '?', (fs.length === 1 ? 'A foto dele vai' : 'As ' + fs.length + ' fotos dele vão') + ' para a lixeira do Drive (30 dias) e ele volta a ficar PENDENTE para o campo.' + (v.foraDaLista ? '\nComo é um NRO fora da lista, ele sai da lista.' : ''), 'Resetar NRO', true))) return;
         bRes.disabled = true;
         try { await api('resetarVeiculo', { loteId: l.loteId, nro: v.nro }); recarregarPatio(); }
         catch (e) { alert(e.message); bRes.disabled = false; }
@@ -399,8 +562,8 @@
   function painelResetar(l, box) {
     abrirPainel(box, 'resetar');
     const p = el('div', 'painel-baixar painel-perigo');
-    p.appendChild(el('h3', 'erro', '♻ Resetar o pátio ' + l.patio));
-    p.appendChild(el('p', null, 'Todas as ' + l.fotos + ' foto(s) deste pátio vão para a lixeira do Google Drive (recuperáveis por 30 dias) e todos os NROs voltam a ficar PENDENTES. A lista de veículos continua igual; NROs digitados fora da lista são removidos.'));
+    const h = el('h3'); h.appendChild(ic('resetar')); h.appendChild(document.createTextNode('Resetar o pátio ' + l.patio)); p.appendChild(h);
+    p.appendChild(el('p', null, 'Todas as fotos deste pátio vão para a lixeira do Google Drive (recuperáveis por 30 dias) e todos os NROs voltam a ficar PENDENTES. A lista de veículos continua igual; NROs digitados fora da lista são removidos.'));
     if (l.naoBaixadas) p.appendChild(el('p', 'aviso', '⚠️ ' + l.naoBaixadas + ' foto(s) ainda NÃO foram baixadas. Baixe antes se precisar delas.'));
     p.appendChild(el('label', null, 'Para confirmar, digite o nome do pátio: ' + l.patio));
     const i = el('input'); i.type = 'text'; i.autocomplete = 'off'; p.appendChild(i);
@@ -437,7 +600,7 @@
   function painelEditar(l, box) {
     if (!abrirPainel(box, 'editar')) return;
     const p = el('div', 'painel-baixar');
-    p.appendChild(el('h3', null, 'Editar pátio'));
+    const he = el('h3'); he.appendChild(ic('editar')); he.appendChild(document.createTextNode('Editar pátio')); p.appendChild(he);
     p.appendChild(el('label', null, 'Nome do pátio CRV'));
     const iPatio = el('input'); iPatio.type = 'text'; iPatio.maxLength = 60; iPatio.value = l.patio; p.appendChild(iPatio);
     p.appendChild(el('label', null, 'Número da lista (opcional)'));
@@ -462,7 +625,7 @@
   function painelExcluir(l, box) {
     if (!abrirPainel(box, 'excluir')) return;
     const p = el('div', 'painel-baixar painel-perigo');
-    p.appendChild(el('h3', 'erro', '🗑 Excluir o pátio ' + l.patio));
+    const hx = el('h3'); hx.appendChild(ic('lixo')); hx.appendChild(document.createTextNode('Excluir o pátio ' + l.patio)); p.appendChild(hx);
     p.appendChild(el('p', null, 'Isto remove o pátio, a lista de ' + l.total + ' veículos e as ' + l.fotos + ' foto(s) dele. As fotos vão para a lixeira do Google Drive e podem ser recuperadas por 30 dias.'));
     if (l.naoBaixadas) p.appendChild(el('p', 'aviso', '⚠️ ' + l.naoBaixadas + ' foto(s) deste pátio ainda NÃO foram baixadas. Baixe antes de excluir se precisar delas.'));
     p.appendChild(el('p', 'suave', 'Fotos ainda guardadas em celulares para este pátio não poderão mais ser enviadas.'));
@@ -504,8 +667,8 @@
     const datas = Object.keys(porData).sort().reverse();
 
     const p = el('div', 'painel-baixar');
-    p.appendChild(el('h3', null, 'Baixar fotos'));
-    p.appendChild(el('div', 'suave', fotos.length + ' foto(s) no total · ' + naoBaixadas.length + ' ainda não baixada(s) · ' + datas.length + ' dia(s) com fotos'));
+    const hb = el('h3'); hb.appendChild(ic('download')); hb.appendChild(document.createTextNode('Baixar fotos')); p.appendChild(hb);
+    p.appendChild(el('div', 'suave', plural(naoBaixadas.length, 'nova', 'novas') + ' · ' + fotos.length + ' no total · o .zip vem com uma pasta por NRO'));
     const nome = 'mod-' + l.loteId;
     const opcao = function (valor, texto, desab) {
       const lab = el('label', 'opcao');
@@ -513,15 +676,16 @@
       lab.appendChild(r); lab.appendChild(document.createTextNode(' ' + texto));
       p.appendChild(lab); return r;
     };
-    const rNovas = opcao('novas', 'Só as que ainda não foram baixadas (' + naoBaixadas.length + ')', !naoBaixadas.length);
+    const rNovas = opcao('novas', 'Só as novas, ainda não baixadas (' + naoBaixadas.length + ')', !naoBaixadas.length);
     const rData = opcao('data', 'Fotos de uma data:', !datas.length);
     const sel = el('select', 'sel-data');
     datas.forEach(function (d) {
-      const o = el('option', null, dataBR(d) + ' — ' + porData[d].total + ' foto(s)' + (porData[d].ja ? ' (' + porData[d].ja + ' já baixada(s))' : ''));
+      const o = el('option', null, dataBR(d) + ' — ' + plural(porData[d].total, 'foto', 'fotos') + (porData[d].ja ? ' (' + porData[d].ja + ' já baixada' + (porData[d].ja === 1 ? '' : 's') + ')' : ''));
       o.value = d; sel.appendChild(o);
     });
-    p.appendChild(sel);
+    rData.parentNode.appendChild(sel);
     const rTodas = opcao('todas', 'Todas as fotos do pátio (' + fotos.length + ')', !fotos.length);
+    sel.addEventListener('mousedown', function () { if (!rData.disabled) { rData.checked = true; atualizar(); } });
     (naoBaixadas.length ? rNovas : rData).checked = true;
 
     const aviso = el('div', 'aviso');
@@ -532,7 +696,7 @@
     const escolha = function () {
       const modo = rNovas.checked ? 'novas' : (rData.checked ? 'data' : 'todas');
       let lista, rotulo, sufixo;
-      if (modo === 'novas') { lista = naoBaixadas; rotulo = 'ainda não baixada(s)'; sufixo = 'nao-baixadas_' + hojeArquivo(); }
+      if (modo === 'novas') { lista = naoBaixadas; rotulo = 'novas'; sufixo = 'nao-baixadas_' + hojeArquivo(); }
       else if (modo === 'data') { lista = fotos.filter(function (f) { return dataDaFoto(f) === sel.value; }); rotulo = 'de ' + dataBR(sel.value); sufixo = 'dia_' + sel.value; }
       else { lista = fotos; rotulo = 'do pátio (todas)'; sufixo = 'todas_' + hojeArquivo(); }
       return { lista: lista, rotulo: rotulo, sufixo: sufixo };
@@ -541,9 +705,11 @@
       const e = escolha();
       sel.disabled = !rData.checked;
       const ja = e.lista.filter(function (f) { return f.baixada; }).length;
-      bOk.textContent = '⬇ Baixar ' + e.lista.length + ' foto(s) ' + e.rotulo;
+      const mb = e.lista.reduce(function (t, f) { return t + (Number(f.bytes) || 0); }, 0) / 1048576;
+      bOk.textContent = ''; bOk.appendChild(ic('download')); const tam = !mb ? '' : (mb < 0.1 ? ' (< 0,1 MB)' : ' (≈ ' + mb.toLocaleString('pt-BR', { maximumFractionDigits: mb < 10 ? 1 : 0 }) + ' MB)');
+      bOk.appendChild(document.createTextNode('Baixar ' + plural(e.lista.length, 'foto', 'fotos') + ' ' + e.rotulo + tam));
       bOk.disabled = !e.lista.length;
-      aviso.textContent = ja ? '⚠️ ' + ja + ' destas fotos já foram baixadas antes. Os nomes dos arquivos são os mesmos: extraindo na mesma pasta, elas são substituídas — não ficam duplicadas.' : '';
+      aviso.textContent = ja ? (ja === 1 ? '1 destas fotos já foi baixada' : ja + ' destas fotos já foram baixadas') + ' antes. Extraindo na mesma pasta, elas são substituídas (não duplicam).' : '';
     };
     [rNovas, rData, rTodas, sel].forEach(function (x) { x.addEventListener('change', atualizar); });
     atualizar();
@@ -609,6 +775,8 @@
   // ---------- novo lote ----------
   const soltar = $('soltar');
   soltar.addEventListener('click', function () { $('inputXlsx').click(); });
+  soltar.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('inputXlsx').click(); } });
+  function passo(n) { $('passos').querySelectorAll('div').forEach(function (d, i) { d.className = i + 1 < n ? 'feito' : (i + 1 === n ? 'atual' : ''); d.querySelector('span').textContent = i + 1 < n ? '✓' : String(i + 1); }); }
   soltar.addEventListener('dragover', function (e) { e.preventDefault(); soltar.classList.add('sobre'); });
   soltar.addEventListener('dragleave', function () { soltar.classList.remove('sobre'); });
   soltar.addEventListener('drop', function (e) { e.preventDefault(); soltar.classList.remove('sobre'); if (e.dataTransfer.files[0]) lerArquivo(e.dataTransfer.files[0]); });
@@ -627,33 +795,41 @@
     } catch (e) { $('novoErro').textContent = 'Não consegui abrir o arquivo como planilha Excel: ' + e.message; }
   }
 
+  const IC_VERIF = { '❌': 'x', '⚠️': 'alerta', 'ℹ️': 'lista', '✅': 'check' };
   function linhaVerif(icone, texto, cls) {
-    const d = el('div', cls || ''); d.textContent = icone + ' ' + texto; return d;
+    const d = el('div', 'linha-verif ' + (cls || '')); d.appendChild(ic(IC_VERIF[icone] || 'lista', 'p')); d.appendChild(document.createTextNode(texto)); return d;
   }
 
   function mostrarVerificacao(r) {
     const box = $('verificacao'); box.textContent = '';
     const c = el('div', 'cartao verif');
     const ok = !r.bloqueios.length;
-    c.appendChild(el('h3', ok ? 'ok' : 'erro', ok ? (r.avisos.length ? '⚠️ Planilha compatível, com avisos' : '✅ Planilha compatível') : '❌ Planilha NÃO compatível — o pátio não pode ser criado'));
+    const h = el('h3', ok ? 'ok' : 'erro'); h.appendChild(ic(ok ? (r.avisos.length ? 'alerta' : 'check') : 'x'));
+    h.appendChild(document.createTextNode(ok ? (r.avisos.length ? 'Planilha compatível, com avisos' : 'Planilha compatível') : 'Planilha NÃO compatível — o pátio não pode ser criado'));
+    c.appendChild(h);
     r.bloqueios.forEach(function (b) { c.appendChild(linhaVerif('❌', b, 'erro')); });
     r.avisos.forEach(function (a) { c.appendChild(linhaVerif('⚠️', a, 'aviso')); });
     (r.infos || []).forEach(function (a) { c.appendChild(linhaVerif('ℹ️', a, 'suave')); });
     if (r.colunas.length) {
-      c.appendChild(el('div', 'suave', 'Colunas reconhecidas:'));
+      const det = el('details', 'colunas');
+      const faltando = r.colunas.filter(function (col) { return !col.coluna && col.nivel !== 'info'; }).length;
+      det.open = faltando > 0;
+      const sm = el('summary'); sm.appendChild(ic(faltando ? 'alerta' : 'check', 'p'));
+      sm.appendChild(document.createTextNode(faltando ? plural(faltando, 'coluna não encontrada', 'colunas não encontradas') + ' — ver detalhes' : plural(r.colunas.filter(function (col) { return col.coluna; }).length, 'coluna reconhecida', 'colunas reconhecidas') + ' (ver detalhes)'));
+      det.appendChild(sm);
       const t = el('table');
       r.colunas.forEach(function (col) {
         const tr = el('tr');
-        tr.appendChild(el('td', null, col.coluna ? '✅' : (col.nivel === 'bloqueio' ? '❌' : (col.nivel === 'aviso' ? '⚠️' : '—'))));
+        const ti = el('td'); ti.appendChild(ic(col.coluna ? 'check' : (col.nivel === 'bloqueio' ? 'x' : (col.nivel === 'aviso' ? 'alerta' : 'pendente')), 'p')); tr.appendChild(ti);
         tr.appendChild(el('td', null, col.rotulo));
         tr.appendChild(el('td', 'suave', col.coluna ? 'coluna ' + col.coluna + ' ("' + col.titulo + '")' : 'não encontrada'));
         t.appendChild(tr);
       });
-      c.appendChild(t);
+      det.appendChild(t); c.appendChild(det);
     }
     if (r.portes.length) {
       c.appendChild(el('div', 'suave', 'Valores de PORTE: ' + r.portes.map(function (p) {
-        return p.valor + ' × ' + p.qtd + ' → ' + p.categoria + (p.conhecido ? '' : ' (não reconhecido)');
+        return p.valor + ' (' + p.qtd + ' na planilha) → ' + (CAT[p.categoria] || p.categoria) + (p.conhecido ? '' : ' (não reconhecido)');
       }).join(' · ')));
     }
     box.appendChild(c);
@@ -666,24 +842,33 @@
     let bloq = 0, semPlaca = 0;
     vs.forEach(function (v) { if (v.naoDestinar) bloq++; else cont[X.categoria(v.porte, v.modelo)]++; if (!v.placa) semPlaca++; });
     const nums = $('previaNums'); nums.textContent = '';
-    [[vs.length, 'veículos na planilha'], [vs.length - bloq, 'para fotografar'], [cont.carros, 'carros'], [cont.motos, 'motos'],
-      [cont.outros, 'outros'], [bloq, 'NÃO DESTINAR'], [semPlaca, 'sem placa']].forEach(function (n) {
+    [[vs.length, 'veículos na planilha'], [vs.length - bloq, 'para fotografar'], [cont.carros, 'carros a fotografar'], [cont.motos, 'motos a fotografar'],
+      [cont.outros, 'outros a fotografar'], [bloq, 'NÃO DESTINAR'], [semPlaca, 'sem placa']].forEach(function (n) {
       const d = el('div'); d.appendChild(el('b', null, String(n[0]))); d.appendChild(document.createTextNode(n[1])); nums.appendChild(d);
     });
     $('previaAvisos').textContent = '';
+    $('previaAvisos').appendChild(el('div', 'suave', 'Prévia: ' + plural(vs.length, 'veículo', 'veículos') + ' (role a tabela para ver todos).'));
     const tab = $('previaTabela'); tab.textContent = '';
     const cab = el('tr');
     ['NRO', 'Categoria', 'Placa', 'Modelo', 'Cor', 'Situação'].forEach(function (h) { cab.appendChild(el('th', null, h)); });
     tab.appendChild(cab);
     vs.forEach(function (v) {
       const tr = el('tr');
-      [v.nro, X.categoria(v.porte, v.modelo), v.placa, v.modelo, v.cor].forEach(function (x) { tr.appendChild(el('td', null, x || '—')); });
-      const td = el('td'); if (v.naoDestinar) td.appendChild(el('span', 'tag vermelho', 'NÃO DESTINAR')); tr.appendChild(td);
+      [v.nro, CAT[X.categoria(v.porte, v.modelo)], v.placa, v.modelo, v.cor].forEach(function (x) { tr.appendChild(el('td', null, x || '—')); });
+      const td = el('td'); if (v.naoDestinar) td.appendChild(etiqueta('bloq')); else { const tf = el('span', 'tag azul'); tf.appendChild(ic('camera')); tf.appendChild(document.createTextNode('Fotografar')); td.appendChild(tf); } tr.appendChild(td);
       tab.appendChild(tr);
     });
-    $('previa').classList.remove('oculto');
-    $('btnCriarLote').disabled = st.bloqueado;
-    $('btnCriarLote').textContent = st.bloqueado ? 'Planilha incompatível — corrija e envie de novo' : 'Criar pátio e liberar para o campo';
+    $('previa').classList.remove('oculto'); passo(st.bloqueado ? 1 : 2);
+    ['btnCriarLote'].forEach(function (id) {
+      $(id).disabled = st.bloqueado;
+      $(id).textContent = ''; $(id).appendChild(ic(st.bloqueado ? 'x' : 'check'));
+      $(id).appendChild(document.createTextNode(st.bloqueado ? 'Planilha incompatível — corrija e envie de novo' : 'Criar pátio e liberar para o campo'));
+    });
+    const ae = $('arquivoEscolhido'); ae.textContent = '';
+    ae.appendChild(ic('arquivo')); ae.appendChild(document.createTextNode(st.arquivo + ' · ' + plural(vs.length, 'veículo', 'veículos')));
+    const troca = botao('btn pequeno cinza', 'trocar', 'Trocar arquivo'); troca.addEventListener('click', function () { $('inputXlsx').click(); });
+    ae.appendChild(troca);
+    ae.classList.remove('oculto'); soltar.classList.add('oculto');
   }
 
   $('btnCriarLote').addEventListener('click', async function () {
@@ -694,7 +879,8 @@
     try {
       const r = await api('criarLote', { patio: patio, numeroLote: lote, arquivo: st.arquivo, veiculos: st.previa });
       alert('Pátio criado: ' + r.total + ' veículos (' + r.destinaveis + ' para fotografar). O pátio já aparece no app de campo.');
-      st.previa = null; $('previa').classList.add('oculto');
+      st.previa = null; $('previa').classList.add('oculto'); passo(1);
+      $('arquivoEscolhido').classList.add('oculto'); soltar.classList.remove('oculto');
       trocarAba('abaLotes');
     } catch (e) { $('novoErro').textContent = e.message; }
     finally { $('btnCriarLote').disabled = false; }
@@ -707,21 +893,42 @@
     try { us = await api('listarUsuarios', {}); } catch (e) { $('uErro').textContent = e.message; return; }
     const cab = el('tr'); ['Usuário', 'Nome', 'Acesso', 'Situação', ''].forEach(function (h) { cab.appendChild(el('th', null, h)); }); tab.appendChild(cab);
     us.forEach(function (u) {
-      const tr = el('tr');
-      [u.usuario, u.nome, u.papel].forEach(function (x) { tr.appendChild(el('td', null, x)); });
-      const td = el('td'); td.appendChild(el('span', 'tag ' + (u.ativo ? 'verde' : 'vermelho'), u.ativo ? 'ativo' : 'inativo')); tr.appendChild(td);
-      const tdb = el('td'); const b = el('button', 'btn pequeno cinza', 'Editar');
-      b.addEventListener('click', function () { $('uUsuario').value = u.usuario; $('uNome').value = u.nome; $('uPapel').value = u.papel; $('uSenha').value = ''; $('uAtivo').checked = u.ativo; window.scrollTo(0, 0); });
+      const tr = el('tr', st.usuarioSalvo === u.usuario ? 'linha-salva' : '');
+      [u.usuario, u.nome, PAPEL[u.papel] || u.papel].forEach(function (x, i) {
+        const td0 = el('td', i === 2 ? 'papel' : null, x);
+        if (i === 0 && st.usuarioSalvo === u.usuario) { const ts = el('span', 'tag verde'); ts.appendChild(ic('check')); ts.appendChild(document.createTextNode('salvo agora')); td0.appendChild(document.createTextNode(' ')); td0.appendChild(ts); }
+        tr.appendChild(td0);
+      });
+      const td = el('td'); const t = el('span', 'tag ' + (u.ativo ? 'verde' : 'vermelho')); t.appendChild(ic(u.ativo ? 'check' : 'bloq')); t.appendChild(document.createTextNode(u.ativo ? 'Ativo' : 'Inativo')); td.appendChild(t); tr.appendChild(td);
+      const tdb = el('td'); const b = botao('btn pequeno cinza', 'editar', 'Editar');
+      b.addEventListener('click', function () {
+        $('uUsuario').value = u.usuario; $('uUsuario').readOnly = true; $('uNome').value = u.nome; $('uPapel').value = u.papel; $('uSenha').value = ''; $('uAtivo').checked = u.ativo;
+        $('uTitulo').textContent = 'Editando: ' + u.usuario; $('btnCancelarEdicao').lastChild.textContent = 'Cancelar edição'; ajudaPapel(); window.scrollTo(0, 0); $('uNome').focus();
+      });
       tdb.appendChild(b); tr.appendChild(tdb); tab.appendChild(tr);
     });
   }
+  const PAPEL = { admin: 'Administrador', gestor: 'Gestão', campo: 'Campo' };
+  const AJUDA_PAPEL = { campo: 'Tira as fotos no pátio (celular).', gestor: 'Envia planilhas, revisa e baixa as fotos.', admin: 'Tudo da gestão + usuários e resetar pátio.' };
+  function ajudaPapel() {
+    $('uPapelAjuda').textContent = AJUDA_PAPEL[$('uPapel').value] || '';
+    $('uSenhaAjuda').textContent = $('uUsuario').readOnly ? 'Mínimo 8 caracteres. Em branco mantém a senha atual.' : 'Mínimo 8 caracteres.';
+  }
+  $('uPapel').addEventListener('change', ajudaPapel);
+  function limparFormUsuario() {
+    ['uUsuario', 'uNome', 'uSenha'].forEach(function (i) { $(i).value = ''; });
+    $('uUsuario').readOnly = false; $('uPapel').value = 'campo'; $('uAtivo').checked = true; ajudaPapel();
+    $('uTitulo').textContent = 'Novo usuário'; $('btnCancelarEdicao').lastChild.textContent = 'Limpar';
+  }
+  $('btnCancelarEdicao').addEventListener('click', limparFormUsuario);
   $('btnSalvarUsuario').addEventListener('click', async function () {
     $('uErro').textContent = '';
     try {
       await api('salvarUsuario', { usuario: $('uUsuario').value.trim(), nome: $('uNome').value.trim(), papel: $('uPapel').value, senha: $('uSenha').value, ativo: $('uAtivo').checked });
-      ['uUsuario', 'uNome', 'uSenha'].forEach(function (i) { $(i).value = ''; });
-      $('uErro').className = 'ok'; $('uErro').textContent = 'Usuário salvo.';
-      setTimeout(function () { $('uErro').className = 'erro'; $('uErro').textContent = ''; }, 3000);
+      const nomeSalvo = $('uUsuario').value.trim();
+      limparFormUsuario();
+      toast('Usuário "' + nomeSalvo + '" salvo');
+      st.usuarioSalvo = nomeSalvo;
       carregarUsuarios();
     } catch (e) { $('uErro').className = 'erro'; $('uErro').textContent = e.message; }
   });

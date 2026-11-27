@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<meta name="theme-color" content="#0f172a">
+<meta name="theme-color" content="#0b1f3a">
+<meta name="versao" content="1.1.0">
 <title>Fotos Pátio CRV</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
@@ -13,22 +14,22 @@
 </head>
 <body>
 <header class="topo">
-  <button class="voltar oculto" id="btnVoltar" aria-label="Voltar">‹</button>
+  <button class="voltar oculto" id="btnVoltar" aria-label="Voltar" data-ic="voltar" data-icc="g"></button>
   <h1 id="titulo">Fotos Pátio CRV</h1>
-  <button class="selo pend oculto" id="seloPend">⬆ 0</button>
-  <span class="selo" id="seloRede">…</span>
-  <button class="selo" id="btnMenu" aria-label="Menu">☰</button>
+  <button class="icone-btn" id="btnMenu" aria-label="Menu" data-ic="menu" data-icc="g"></button>
+  <button class="faixa-sync oculto" id="seloPend" aria-live="polite"></button>
 </header>
 
 <main>
   <!-- LOGIN -->
   <section id="telaLogin" class="oculto">
-    <div class="cartao">
+    <div class="marca-login"><span class="marca-ic" data-ic="camera" data-icc="g"></span><div><b>Fotos Pátio CRV</b><span>Pratik-Car · campo</span></div></div>
+    <div class="cartao login">
       <h2>Entrar</h2>
       <label for="loginUsuario">Usuário</label>
       <input type="text" id="loginUsuario" autocomplete="username" autocapitalize="none">
       <label for="loginSenha">Senha</label>
-      <input type="password" id="loginSenha" autocomplete="current-password">
+      <div class="campo-senha"><input type="password" id="loginSenha" autocomplete="current-password"><button type="button" class="ver-senha" id="btnVerSenha" aria-label="Mostrar senha" data-ic="olho"></button></div>
       <div class="erro" id="loginErro"></div>
       <button class="btn" id="btnEntrar">Entrar</button>
       <p class="suave">Entre uma vez com internet. Depois o app funciona sem sinal.</p>
@@ -40,11 +41,12 @@
   <section id="telaPatios" class="oculto">
     <div class="titulo-secao">Pátios ativos</div>
     <div class="grade" id="listaPatios"></div>
-    <p class="suave" id="atualizadoEm"></p>
+    <div class="linha-atualizado"><p class="suave" id="atualizadoEm"></p><button class="btn pequeno cinza" id="btnAtualizarListas" data-ic="atualizar">Atualizar</button></div>
   </section>
 
   <!-- CATEGORIAS -->
   <section id="telaCategorias" class="oculto">
+    <div id="faixaCat"></div>
     <div class="titulo-secao">O que vai fotografar?</div>
     <div class="grade" id="listaCategorias"></div>
   </section>
@@ -52,15 +54,16 @@
   <!-- LISTA DE NROS -->
   <section id="telaLista" class="oculto">
     <div class="busca">
-      <input type="search" id="busca" placeholder="Buscar NRO, placa ou modelo" autocomplete="off">
+      <div class="campo-busca" data-ic="busca"><input type="search" id="busca" placeholder="Buscar NRO, placa ou modelo" autocomplete="off" aria-label="Buscar"></div>
       <div class="filtros" id="filtros">
         <button data-filtro="pendentes" class="ativo">Pendentes</button>
         <button data-filtro="feitos">Fotografados</button>
         <button data-filtro="todos">Todos</button>
       </div>
+      <div class="nota-bloq oculto" id="notaBloq"></div>
     </div>
     <div id="listaIds"></div>
-    <button class="btn cinza" id="btnManual">Digitar NRO fora da lista</button>
+    <button class="btn cinza" id="btnManual" data-ic="teclado">Digitar NRO fora da lista</button>
   </section>
 
   <!-- VEÍCULO: dados, fotos tiradas e câmera -->
@@ -73,17 +76,19 @@
       <div class="galeria" id="galeriaLocais"></div>
       <div class="titulo-secao oculto" id="tituloEnviadas">Enviadas</div>
       <div class="galeria" id="galeriaEnviadas"></div>
-      <p class="suave">"Apagar" tira a foto só da sua tela. Ela continua indo para a gestão. Fotos já baixadas pela gestão não podem ser apagadas.</p>
-      <div class="acao-veiculo"><button class="btn verde" id="btnTirarFotos">📷 Tirar fotos</button></div>
+      <p class="suave">"Ocultar" tira a foto só do seu celular; a gestão continua recebendo.</p>
+      <div class="acao-veiculo"><button class="btn" id="btnTirarFotos">Tirar fotos</button><button class="btn oculto" id="btnProximoVeiculo"></button></div>
     </div>
   </section>
   </div>
+
+  <div class="rodape-acao oculto" id="rodapeLista"><button class="btn" id="btnProximo"></button></div>
 
   <!-- FILA DE ENVIO -->
   <section id="telaFila" class="oculto">
     <div class="cartao">
       <div id="filaResumo"></div>
-      <div class="linha-btns"><button class="btn pequeno" id="btnEnviarAgora">Enviar agora</button></div>
+      <div class="linha-btns"><button class="btn" id="btnEnviarAgora" data-ic="upload">Enviar agora</button></div>
     </div>
     <div id="filaItens"></div>
   </section>
@@ -92,12 +97,13 @@
 <!-- CÂMERA -->
 <div class="camera oculto" id="camera">
   <video id="video" playsinline muted autoplay></video>
-  <div class="cab"><span id="camTitulo"></span><button class="selo oculto" id="btnLanterna">🔦</button></div>
+  <div class="cab"><div class="alvo-nro" id="camTitulo"></div><button class="cam-fechar" id="btnCamCancelar" aria-label="Cancelar e fechar a câmera" data-ic="x" data-icc="g"></button></div>
+  <div class="passos-cam" id="camPassos"></div>
   <div class="miniaturas" id="miniaturas"></div>
   <div class="controles">
-    <button class="btn cinza pequeno" id="btnCamCancelar">Cancelar</button>
+    <button class="lanterna oculto" id="btnLanterna" aria-label="Lanterna" data-ic="lanterna" data-icc="g"></button>
     <button class="obturador" id="btnObturador" aria-label="Tirar foto"></button>
-    <button class="btn verde pequeno" id="btnCamConfirmar" disabled>Confirmar (0)</button>
+    <button class="btn verde" id="btnCamConfirmar" disabled>Salvar</button>
   </div>
   <input type="file" accept="image/*" capture="environment" id="inputArquivo" class="oculto">
 </div>
@@ -105,6 +111,7 @@
 
 <script src="config.js"></script>
 <script src="sync-core.js"></script>
+<script src="icones.js"></script>
 <script src="campo.js"></script>
 </body>
 </html>

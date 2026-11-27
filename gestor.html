@@ -11,18 +11,18 @@
 </head>
 <body class="gestor">
 <header class="topo">
-  <h1>Fotos Pátio CRV — Gestão</h1>
+  <h1><span class="marca" data-ic="camera"></span><span class="titulo-txt"><span class="so-pc">Fotos Pátio CRV · </span>Gestão</span></h1>
   <span class="selo" id="quem"></span>
-  <button class="selo oculto" id="btnSair">Sair</button>
+  <button class="selo oculto" id="btnSair" data-ic="sair">Sair</button>
 </header>
 <main>
   <section id="telaLogin" class="oculto">
     <div class="cartao">
       <h2>Entrar</h2>
       <label for="loginUsuario">Usuário</label>
-      <input type="text" id="loginUsuario" autocomplete="username" autocapitalize="none">
+      <input type="text" id="loginUsuario" autocomplete="username" autocapitalize="none" autofocus>
       <label for="loginSenha">Senha</label>
-      <input type="password" id="loginSenha" autocomplete="current-password">
+      <div class="campo-senha gestao"><input type="password" id="loginSenha" autocomplete="current-password"><button type="button" class="ver-senha" data-alvo="loginSenha" aria-label="Mostrar senha" data-ic="olho"></button></div>
       <div class="erro" id="loginErro"></div>
       <button class="btn" id="btnEntrar">Entrar</button>
     </div>
@@ -30,15 +30,15 @@
 
   <section id="telaApp" class="oculto">
     <div class="abas">
-      <button data-aba="abaLotes" class="ativo">Pátios</button>
-      <button data-aba="abaNovo">+ Novo pátio (Excel)</button>
-      <button data-aba="abaUsuarios" class="oculto" id="botaoAbaUsuarios">Usuários</button>
-      <button data-aba="abaConta">Minha senha</button>
+      <button data-aba="abaLotes" class="ativo" data-ic="pin">Pátios</button>
+      <button data-aba="abaNovo" data-ic="mais">Novo pátio</button>
+      <button data-aba="abaUsuarios" class="oculto" id="botaoAbaUsuarios" data-ic="usuarios">Usuários</button>
+      <button data-aba="abaConta" data-ic="chave">Minha senha</button>
     </div>
 
     <div id="abaLotes">
       <div id="seletorPatios">
-        <div class="col-cab"><span>Escolha o pátio</span><button class="btn pequeno cinza" id="btnRecarregar" title="Atualizar">🔄 Atualizar</button></div>
+        <div class="col-cab"><span>Escolha o pátio</span><button class="btn pequeno cinza" id="btnRecarregar" data-ic="atualizar">Atualizar</button></div>
         <div id="listaLotes" class="grade-patios"></div>
       </div>
       <div id="painelPatio" class="oculto"></div>
@@ -50,40 +50,42 @@
 
     <div id="abaNovo" class="oculto">
       <div class="cartao">
-        <div class="soltar" id="soltar">Arraste aqui a planilha de destinação (.xlsx) ou clique para escolher</div>
+        <div class="passos" id="passos"><div class="atual"><span>1</span>Escolher planilha</div><div><span>2</span>Conferir</div><div><span>3</span>Criar e liberar</div></div>
+        <div class="arquivo-escolhido oculto" id="arquivoEscolhido"></div>
+        <div class="soltar" id="soltar" role="button" tabindex="0" data-ic="planilha"><b>Arraste aqui a planilha de destinação (.xlsx)</b><span>ou clique para escolher o arquivo</span><span class="ajuda-campo">Use a planilha de destinação do DETRAN: colunas NRO, PLACA, MODELO, COR, PORTE e a situação (NÃO DESTINAR).</span></div>
         <input type="file" id="inputXlsx" accept=".xlsx" class="oculto">
         <div class="erro" id="novoErro"></div>
         <div id="previa" class="oculto">
-          <div id="verificacao"></div>
           <div class="resumo-num" id="previaNums"></div>
           <div class="grade">
             <div><label for="novoPatio">Pátio CRV (obrigatório)</label><input type="text" id="novoPatio" maxlength="60"></div>
             <div><label for="novoLote">Número da lista (opcional)</label><input type="text" id="novoLote" maxlength="30"></div>
           </div>
+          <div id="verificacao"></div>
           <div id="previaAvisos" class="suave"></div>
           <div class="rolagem"><table id="previaTabela"></table></div>
-          <div class="linha-btns"><button class="btn verde" id="btnCriarLote">Criar pátio e liberar para o campo</button></div>
+          <div class="linha-btns"><button class="btn verde" id="btnCriarLote" data-ic="check">Criar pátio e liberar para o campo</button></div>
         </div>
       </div>
     </div>
 
     <div id="abaUsuarios" class="oculto">
       <div class="cartao">
-        <h3>Novo usuário / editar</h3>
+        <h3 id="uTitulo">Novo usuário</h3>
         <div class="grade">
           <div><label for="uUsuario">Usuário (login)</label><input type="text" id="uUsuario" maxlength="30" autocapitalize="none"></div>
           <div><label for="uNome">Nome</label><input type="text" id="uNome" maxlength="60"></div>
           <div><label for="uPapel">Acesso</label>
             <select id="uPapel">
-              <option value="campo">Campo — tira as fotos no pátio</option>
-              <option value="gestor">Gestão — envia planilhas e baixa fotos</option>
+              <option value="campo">Campo</option>
+              <option value="gestor">Gestão</option>
               <option value="admin">Administrador</option>
-            </select></div>
-          <div><label for="uSenha">Senha (mín. 8; em branco mantém a atual)</label><input type="password" id="uSenha" autocomplete="new-password"></div>
-          <div><label><input type="checkbox" id="uAtivo" checked> Ativo</label></div>
+            </select><div class="ajuda-campo" id="uPapelAjuda">Tira as fotos no pátio (celular).</div></div>
+          <div><label for="uSenha">Senha</label><div class="campo-senha gestao"><input type="password" id="uSenha" autocomplete="new-password"><button type="button" class="ver-senha" data-alvo="uSenha" aria-label="Mostrar senha" data-ic="olho"></button></div><div class="ajuda-campo" id="uSenhaAjuda">Mínimo 8 caracteres.</div></div>
+          <div class="linha-inteira"><label class="check-linha"><input type="checkbox" id="uAtivo" checked> Usuário ativo (pode entrar no app)</label></div>
         </div>
         <div class="erro" id="uErro"></div>
-        <div class="linha-btns"><button class="btn pequeno" id="btnSalvarUsuario">Salvar usuário</button></div>
+        <div class="linha-btns"><button class="btn pequeno" id="btnSalvarUsuario" data-ic="check">Salvar usuário</button><button class="btn pequeno cinza" id="btnCancelarEdicao" data-ic="x">Limpar</button></div>
       </div>
       <div class="cartao"><table id="tabelaUsuarios"></table></div>
     </div>
@@ -103,6 +105,7 @@
 <script src="sync-core.js"></script>
 <script src="jszip.min.js"></script>
 <script src="xlsx-leitor.js"></script>
+<script src="icones.js"></script>
 <script src="gestor.js"></script>
 </body>
 </html>
