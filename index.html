@@ -6,7 +6,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#0b1f3a">
-<meta name="versao" content="1.1.0">
+<meta name="versao" content="1.1.1">
 <title>Fotos Pátio CRV</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
@@ -54,7 +54,7 @@
   <!-- LISTA DE NROS -->
   <section id="telaLista" class="oculto">
     <div class="busca">
-      <div class="campo-busca" data-ic="busca"><input type="search" id="busca" placeholder="Buscar NRO, placa ou modelo" autocomplete="off" aria-label="Buscar"></div>
+      <div class="campo-busca" data-ic="busca"><input type="search" id="busca" inputmode="numeric" placeholder="Buscar NRO" autocomplete="off" aria-label="Buscar"></div>
       <div class="filtros" id="filtros">
         <button data-filtro="pendentes" class="ativo">Pendentes</button>
         <button data-filtro="feitos">Fotografados</button>
@@ -76,13 +76,16 @@
       <div class="galeria" id="galeriaLocais"></div>
       <div class="titulo-secao oculto" id="tituloEnviadas">Enviadas</div>
       <div class="galeria" id="galeriaEnviadas"></div>
-      <p class="suave">"Ocultar" tira a foto só do seu celular; a gestão continua recebendo.</p>
-      <div class="acao-veiculo"><button class="btn" id="btnTirarFotos">Tirar fotos</button><button class="btn oculto" id="btnProximoVeiculo"></button></div>
+      <div class="acao-veiculo">
+        <button class="btn oculto" id="btnVoltarLista" data-ic="voltar">Voltar à lista</button>
+        <button class="btn" id="btnTirarFotos">Tirar fotos</button>
+        <button class="btn cinza oculto" id="btnRefazer" data-ic="resetar">Refazer fotos</button>
+        <button class="btn cinza discreto oculto" id="btnDificil">Difícil acesso (sem foto)</button>
+      </div>
     </div>
   </section>
   </div>
 
-  <div class="rodape-acao oculto" id="rodapeLista"><button class="btn" id="btnProximo"></button></div>
 
   <!-- FILA DE ENVIO -->
   <section id="telaFila" class="oculto">

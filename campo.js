@@ -93,7 +93,6 @@
     $('btnVoltar').classList.toggle('oculto', L || tela === 'telaLogin' || tela === 'telaPatios');
     $('btnMenu').classList.toggle('oculto', tela === 'telaLogin');
     if (empilhar) history.pushState(estadoHist(tela), '');
-    if (tela !== 'telaLista') $('rodapeLista').classList.add('oculto');
     if (st.tela !== tela || empilhar) { st.aviso = null; }
     if (st.tela !== tela || empilhar) document.querySelectorAll('.toast').forEach(function (t) { if (Date.now() - (t.criado || 0) > 1500) t.remove(); });
     desenhar();
@@ -133,16 +132,33 @@
   function loteAtual() { return st.dados && st.dados.lotes.find(function (l) { return l.loteId === st.loteId; }); }
   async function recarregarFila() {
     const fila = await N.filaTodos();
-    const mapa = {};
-    fila.forEach(function (f) { if (f.apagadaCampo) return; const k = f.loteId + '|' + f.nro; mapa[k] = (mapa[k] || 0) + 1; });
+    const mapa = {}, acoes = {};
+    let fotos = 0;
+    fila.forEach(function (f) {
+      const k = f.loteId + '|' + f.nro;
+      if (f.tipo === 'acao') { acoes[k] = f; return; }
+      fotos++;
+      if (f.apagadaCampo || f.substituida) return;
+      mapa[k] = (mapa[k] || 0) + 1;
+    });
     st.pendLocal = mapa;
-    st.filaTotal = fila.length;
-    return fila;
+    st.acoesPend = acoes;
+    st.filaTotal = fotos;
+    st.acoesTotal = fila.length - fotos;
+    return fila.filter(function (f) { return f.tipo !== 'acao'; });
+  }
+  // difícil acesso: vale o que ainda está na fila do celular; senão, o que veio do servidor
+  function dificilDe(lote, v) {
+    const a = st.acoesPend && st.acoesPend[lote.loteId + '|' + v.nro];
+    return a ? !!a.dificil : !!v.dificil;
   }
   function estadoVeiculo(lote, v) {
     if (v.naoDestinar) return 'bloq';
     if (st.pendLocal[lote.loteId + '|' + v.nro]) return 'local';
-    if (v.status === 'fotografado') return 'feito';
+    const d = dificilDe(lote, v);
+    if (d) return 'feito';
+    // "fotografado" só por causa do difícil acesso que acabou de ser desfeito → volta a pendente
+    if (v.status === 'fotografado' && !(v.dificil && !d && !(Number(v.fotos) > 0) && v.marcacao !== 'fotografado')) return 'feito';
     return 'pendente';
   }
   function contar(lote, categoria) {
@@ -357,31 +373,10 @@
 
   function textoNorm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
 
-  // próximo NRO pendente da categoria (na ordem da lista), sem contar o atual
-  function proximoPendente(depoisDe) {
-    const l = loteAtual(); if (!l || !st.categoria) return null;
-    const itens = l.veiculos.filter(function (v) { return v.categoria === st.categoria && estadoVeiculo(l, v) === 'pendente'; })
-      .sort(function (a, b) { return Number(a.nro) - Number(b.nro); });
-    if (!itens.length) return null;
-    if (depoisDe) { const prox = itens.find(function (v) { return Number(v.nro) > Number(depoisDe); }); if (prox) return prox; }
-    return itens.find(function (v) { return v.nro !== depoisDe; }) || null;
-  }
-  function textoProximo(btn, v, prefixo) {
-    btn.textContent = '';
-    btn.appendChild(ic('camera'));
-    const t = el('span'); t.appendChild(document.createTextNode((prefixo || 'Fotografar próximo') + ': NRO ' + v.nro + ' '));
-    if (v.placa) t.appendChild(el('small', null, fmtPlaca(v.placa)));
-    btn.appendChild(t);
-  }
-  $('btnProximo').addEventListener('click', function () {
-    const v = proximoPendente(st.ultimoNro);
-    if (v) { st.sel = selDe(v); abrirCamera(); }
-  });
 
   function desenharLista() {
     const l = loteAtual();
     const box = $('listaIds');
-    $('rodapeLista').classList.add('oculto');
     if (!l || !st.categoria) {
       if (largo()) {
         box.textContent = '';
@@ -417,10 +412,7 @@
       x.classList.toggle('ativo', f === st.filtro);
       x.setAttribute('aria-pressed', f === st.filtro ? 'true' : 'false');
     });
-    const nota = $('notaBloq');
-    nota.textContent = '';
-    if (cont.bloq) { nota.appendChild(ic('bloq', 'p')); nota.appendChild(document.createTextNode(st.filtro === 'todos' ? 'Inclui ' + cont.bloq + ' NÃO DESTINAR (não fotografar).' : cont.bloq + ' NÃO DESTINAR ficam só em "Todos".')); }
-    nota.classList.toggle('oculto', !cont.bloq);
+    $('notaBloq').classList.add('oculto');
 
     const ICONE = { pendente: 'pendente', feito: 'check', local: 'celular', bloq: 'bloq' };
     box.classList.toggle('so-pendentes', st.filtro === 'pendentes');
@@ -437,12 +429,12 @@
       const est = el('div', 'estado'); est.appendChild(ic(ICONE[e])); linha.appendChild(est);
       linha.appendChild(el('div', 'nro', v.nro));
       const d = el('div', 'desc');
-      d.appendChild(el('div', 'placa', v.placa ? fmtPlaca(v.placa) + (v.uf ? ' · ' + v.uf : '') : (v.foraDaLista ? 'Fora da lista' : 'Sem placa')));
+      d.appendChild(el('div', 'placa' + (v.placa ? '' : ' sem'), v.placa ? fmtPlaca(v.placa) + (v.uf ? ' · ' + v.uf : '') : (v.foraDaLista ? 'Fora da lista' : 'Sem placa')));
       d.appendChild(el('div', 'mod', [v.modelo, v.cor].filter(Boolean).join(' · ') || '—'));
       let stx = '';
       if (e === 'bloq') stx = 'NÃO DESTINAR — não fotografar';
       else if (e === 'local') stx = plural(st.pendLocal[l.loteId + '|' + v.nro], 'foto no celular', 'fotos no celular');
-      else if (e === 'feito') stx = plural(v.fotos, 'foto enviada', 'fotos enviadas');
+      else if (e === 'feito') stx = Number(v.fotos) > 0 ? plural(v.fotos, 'foto enviada', 'fotos enviadas') : 'Fotografado';
       else if (st.filtro !== 'pendentes') stx = 'Pendente';
       if (stx) d.appendChild(el('div', 'st', stx));
       linha.appendChild(d);
@@ -466,12 +458,6 @@
       vz.appendChild(ic(st.filtro === 'pendentes' && !q ? 'check' : 'busca'));
       vz.appendChild(el('div', null, st.filtro === 'pendentes' && !q ? 'Nenhum pendente nesta categoria. 🎉' : 'Nada encontrado.'));
       box.appendChild(vz);
-    }
-    // ação principal na área do polegar: fotografar o próximo pendente
-    const prox = proximoPendente(st.ultimoNro);
-    if (prox && !largo() && st.tela === 'telaLista') {
-      textoProximo($('btnProximo'), prox, st.ultimoNro ? 'Próximo' : 'Começar');
-      $('rodapeLista').classList.remove('oculto');
     }
   }
 
@@ -510,19 +496,40 @@
 
   // ---------- tela do veículo (dados + fotos tiradas + câmera) ----------
 
-  function cartaoFoto(src, legenda, aoApagar, bloqueada) {
+  function cartaoFoto(src, legenda) {
     const c = el('div', 'foto-cartao');
     const img = el('img'); img.alt = legenda; if (src) img.src = src;
     img.addEventListener('click', function () { if (img.src) ampliar(img.src); });
     c.appendChild(img);
     c.appendChild(el('div', 'leg-foto', legenda));
-    if (bloqueada) { const t = el('div', 'tag verde'); t.appendChild(ic('check')); t.appendChild(document.createTextNode('Já baixada pela gestão')); c.appendChild(t); }
-    else if (aoApagar) {
-      const b = el('button', 'btn pequeno cinza'); b.appendChild(ic('ocultar', 'p')); b.appendChild(document.createTextNode('Ocultar'));
-      b.addEventListener('click', aoApagar);
-      c.appendChild(b);
-    }
     return { cartao: c, img: img };
+  }
+
+  // ---------- difícil acesso (funciona sem sinal: vai pela fila) ----------
+  async function marcarDificil(l, v, marcar) {
+    let motivo = '';
+    if (marcar) {
+      const r = await modal('Difícil acesso?', 'O NRO ' + v.nro + ' vai para Fotografados sem precisar de foto. Qual o motivo? (opcional)', [
+        { texto: 'Bloqueado por outros veículos', valor: 'Bloqueado por outros veículos' },
+        { texto: 'Local perigoso', valor: 'Local perigoso' },
+        { texto: 'Outro / sem motivo', cls: 'cinza', valor: '-' },
+        { texto: 'Cancelar', cls: 'cinza', valor: null }
+      ]);
+      if (!r) return;
+      motivo = r === '-' ? '' : r;
+    } else {
+      const r = await modal('Desfazer difícil acesso?', 'O NRO ' + v.nro + ' volta para Pendentes.', [{ texto: 'Desfazer', valor: 1 }, { texto: 'Cancelar', cls: 'cinza', valor: null }]);
+      if (!r) return;
+    }
+    // uma ação por NRO na fila: a última vale
+    const ant = st.acoesPend[l.loteId + '|' + v.nro];
+    if (ant) await N.filaDel(ant.uuid);
+    if (ant && marcar === !!v.dificil) { /* voltou ao que o servidor já tem: não precisa enviar */ }
+    else await N.filaPut({ uuid: crypto.randomUUID(), tipo: 'acao', acao: 'dificilAcesso', loteId: l.loteId, nro: v.nro, dificil: marcar, motivo: motivo, criadoEm: new Date().toISOString(), tentativas: 0 });
+    await recarregarFila();
+    toast(marcar ? 'NRO ' + v.nro + ' em Fotografados · difícil acesso' : 'NRO ' + v.nro + ' voltou para Pendentes');
+    desenhar();
+    enviarFila();
   }
 
   // miniaturas das fotos enviadas ficam guardadas no celular (até 400) para ver sem internet
@@ -572,42 +579,57 @@
     if (!largo()) $('titulo').textContent = (CAT_NOMES[v.categoria] || 'Veículo') + ' · ' + l.patio;
 
     // fotos ainda no celular
-    const fila = (await N.filaTodos()).filter(function (f) { return f.loteId === l.loteId && f.nro === nro && !f.apagadaCampo; });
+    const fila = (await N.filaTodos()).filter(function (f) { return f.tipo !== 'acao' && f.loteId === l.loteId && f.nro === nro && !f.apagadaCampo && !f.substituida; });
     if (meu !== st.galSeq) return;
     const topo = $('veiculoTopo'); topo.textContent = '';
-    const e = v.naoDestinar ? 'bloq' : (fila.length ? 'local' : (v.status === 'fotografado' ? 'feito' : 'pendente'));
+    const e = v.naoDestinar ? 'bloq' : (fila.length ? 'local' : estadoVeiculo(l, v));
+    const dificil = e === 'feito' && dificilDe(l, v);
     const linha = el('div', 'linha');
     linha.appendChild(el('div', 'nro-grande', 'NRO ' + nro));
-    const ROT = { local: ['amarelo', 'celular', plural(fila.length, 'foto', 'fotos') + ' no celular'], feito: ['verde', 'check', 'Fotografado' + (v.fotos ? ' · ' + plural(v.fotos, 'foto', 'fotos') : '')], pendente: ['', 'pendente', 'Pendente'], bloq: ['vermelho', 'bloq', 'NÃO DESTINAR'] }[e];
+    const ROT = { local: ['amarelo', 'upload', plural(fila.length, 'foto', 'fotos') + ' aguardando envio'], feito: ['verde', 'check', 'Fotografado' + (Number(v.fotos) > 0 ? ' · ' + plural(v.fotos, 'foto', 'fotos') : '')], pendente: ['', 'pendente', 'Pendente'], bloq: ['vermelho', 'bloq', 'NÃO DESTINAR'] }[e];
     const tg = el('span', 'tag ' + ROT[0]); tg.appendChild(ic(ROT[1])); tg.appendChild(document.createTextNode(ROT[2])); linha.appendChild(tg);
+    if (dificil) {
+      const td = el('span', 'tag laranja'); td.appendChild(ic('alerta')); td.appendChild(document.createTextNode('Difícil acesso')); linha.appendChild(td);
+    }
     topo.appendChild(linha);
-    topo.appendChild(placaVis(v.placa, v.uf, st.sel.foraDaLista || v.foraDaLista));
+    const lp = el('div', 'linha-placa');
+    lp.appendChild(placaVis(v.placa, v.uf, st.sel.foraDaLista || v.foraDaLista));
+    if (v.uf) lp.appendChild(el('span', 'uf', v.uf));
+    topo.appendChild(lp);
+    if (dificil) {
+      const a = st.acoesPend[l.loteId + '|' + nro];
+      const mot = a ? a.motivo : v.dificilMotivo;
+      topo.appendChild(el('div', 'nota-dificil', 'Marcado como difícil acesso' + (mot ? ': ' + mot : '') + '. Não precisa de foto.'));
+    }
+    if (v.marcacao && !dificil && e !== 'local') topo.appendChild(el('div', 'suave', 'Situação marcada pela gestão.'));
     topo.appendChild(el('div', 'modelo', [v.modelo, v.cor].filter(Boolean).join(' · ') || 'Modelo não informado'));
     topo.appendChild(el('div', 'suave', CAT_NOMES[v.categoria] + (v.chassi ? ' · chassi ' + v.chassi : '')));
-    // depois de fotografar: atalho para o próximo pendente
-    const prox = (e === 'local' || e === 'feito') ? proximoPendente(nro) : null;
-    const bp = $('btnProximoVeiculo');
-    bp.classList.toggle('oculto', !prox);
-    if (prox) { textoProximo(bp, prox, 'Próximo'); bp.onclick = function () { st.sel = selDe(prox); abrirCamera(); }; }
-    const temFoto = e === 'local' || e === 'feito';
-    $('btnTirarFotos').className = temFoto ? 'btn cinza' : 'btn';
-    $('btnTirarFotos').textContent = ''; $('btnTirarFotos').appendChild(ic(temFoto ? 'mais' : 'camera', temFoto ? 'p' : 'g'));
+    // ações: pendente → fotografar; com fotos → voltar à lista, mais fotos, refazer
+    const temFoto = e === 'local' || (e === 'feito' && Number(v.fotos) > 0);
+    const feito = e === 'local' || e === 'feito';
+    const bv = $('btnVoltarLista');
+    bv.classList.toggle('oculto', !feito || largo());
+    $('btnTirarFotos').className = feito ? 'btn cinza' : 'btn';
+    $('btnTirarFotos').textContent = ''; $('btnTirarFotos').appendChild(ic(feito ? 'mais' : 'camera', feito ? 'p' : 'g'));
     $('btnTirarFotos').appendChild(document.createTextNode(temFoto ? 'Mais fotos deste NRO' : 'Fotografar NRO ' + nro));
-    // a ação principal fica por último (mais perto do polegar)
-    const acao = $('btnTirarFotos').parentNode;
-    acao.appendChild($('btnTirarFotos')); // "Próximo" primeiro (ação principal), "Mais fotos" abaixo
+    $('btnRefazer').classList.toggle('oculto', !temFoto);
+    const bd = $('btnDificil');
+    bd.classList.toggle('oculto', e === 'bloq' || e === 'local' || (e === 'feito' && !dificil));
+    bd.textContent = ''; bd.appendChild(ic(dificil ? 'resetar' : 'alerta', 'p'));
+    bd.appendChild(document.createTextNode(dificil ? 'Desfazer difícil acesso' : 'Difícil acesso (sem foto)'));
+    bd.onclick = function () { marcarDificil(l, v, !dificil); };
 
     const boxL = $('galeriaLocais'), boxE = $('galeriaEnviadas');
     boxL.querySelectorAll('img').forEach(function (i) { if (i.src.indexOf('blob:') === 0) URL.revokeObjectURL(i.src); });
     boxL.textContent = ''; $('galeriaAviso').textContent = '';
     $('tituloLocais').classList.toggle('oculto', !fila.length);
     fila.forEach(function (f, i) {
-      const r = cartaoFoto(URL.createObjectURL(f.blob), tipoFoto(i) + ' · ' + hora(f.tiradaEm), async function () {
-        const ok = await modal('Ocultar foto?', 'A foto some só do seu celular. Ela continua sendo enviada para a gestão.', [{ texto: 'Ocultar', valor: 1 }, { texto: 'Cancelar', cls: 'cinza', valor: null }]);
-        if (!ok) return;
-        f.apagadaCampo = true; await N.filaPut(f);
-        await recarregarFila(); desenhar();
-      });
+      const r = cartaoFoto(URL.createObjectURL(f.blob), tipoFoto(i) + ' · ' + hora(f.tiradaEm));
+      r.cartao.classList.add(f.travada ? 'falhou' : 'aguardando');
+      const t = el('span', 'tag ' + (f.travada ? 'vermelho' : 'amarelo'));
+      t.appendChild(ic(f.travada ? 'alerta' : 'upload'));
+      t.appendChild(document.createTextNode(f.travada ? 'Falhou · tenta de novo' : 'Aguardando envio'));
+      r.cartao.appendChild(t);
       boxL.appendChild(r.cartao);
     });
 
@@ -635,19 +657,8 @@
     if (!enviadas.length && !fila.length) $('galeriaAviso').textContent = 'Nenhuma foto deste NRO.';
     enviadas.forEach(function (f) {
       const ordem = Number((/_(\d+)/.exec(f.nome) || [])[1] || 0) - 1;
-      const r = cartaoFoto(null, tipoFoto(ordem) + ' · ' + hora(f.tiradaEm), f.baixada ? null : async function () {
-        const ok = await modal('Ocultar foto?', 'A foto some só do seu celular. A gestão continua com ela.', [{ texto: 'Ocultar', valor: 1 }, { texto: 'Cancelar', cls: 'cinza', valor: null }]);
-        if (!ok) return;
-        try {
-          await N.chamarApi('ocultarFoto', { uuid: f.uuid }, token);
-          const v = l.veiculos.find(function (x) { return x.nro === nro; });
-          if (v) { v.fotos = Math.max(0, (v.fotos || 0) - 1); if (!v.fotos) v.status = 'pendente'; }
-          await N.kvSet('dadosCampo', st.dados);
-          st.envCache = null;
-          toast('Foto ocultada no seu celular.');
-          desenhar();
-        } catch (e) { toast(e.code === 'REDE' ? 'Sem internet para apagar agora.' : e.message); }
-      }, f.baixada);
+      const r = cartaoFoto(null, tipoFoto(ordem) + ' · ' + hora(f.tiradaEm));
+      const te = el('span', 'tag verde'); te.appendChild(ic('check')); te.appendChild(document.createTextNode('Enviada')); r.cartao.appendChild(te);
       boxE.appendChild(r.cartao);
       if (st.minis[f.uuid]) r.img.src = st.minis[f.uuid];
       else miniGuardada(f.uuid).then(function (src) {
@@ -663,8 +674,16 @@
 
   // ---------- câmera ----------
   $('btnTirarFotos').addEventListener('click', function () { if (st.sel) abrirCamera(); });
+  $('btnVoltarLista').addEventListener('click', function () { history.back(); });
+  $('btnRefazer').addEventListener('click', async function () {
+    if (!st.sel) return;
+    const r = await modal('Refazer as fotos do NRO ' + st.sel.nro + '?', 'A câmera abre agora. As fotos antigas só saem da sua tela quando você salvar as novas (a gestão continua com elas). Se cancelar, nada muda.', [
+      { texto: 'Refazer fotos', icone: 'camera', valor: 1 }, { texto: 'Cancelar', cls: 'cinza', valor: null }]);
+    if (r) abrirCamera(true);
+  });
 
-  async function abrirCamera() {
+  async function abrirCamera(refazer) {
+    st.refazerEm = refazer ? new Date().toISOString() : null;
     st.camFotos = [];
     desenharMiniaturas();
     const alvo = $('camTitulo'); alvo.textContent = '';
@@ -813,14 +832,27 @@
     const nroFeito = st.sel.nro;
     $('btnCamConfirmar').disabled = true;
     const qtd = st.camFotos.length;
+    const refazerEm = st.refazerEm;
     try {
+      if (refazerEm) {
+        // fotos antigas ainda no celular: sobem marcadas como substituídas
+        const antigas = (await N.filaTodos()).filter(function (f) { return f.tipo !== 'acao' && f.loteId === st.loteId && f.nro === st.sel.nro && !f.substituida; });
+        for (const f of antigas) { f.substituida = true; await N.filaPut(f); }
+      }
       for (const f of st.camFotos) {
         await N.filaPut({
           uuid: crypto.randomUUID(), loteId: st.loteId, nro: st.sel.nro, categoria: st.sel.categoria,
           foraDaLista: !!st.sel.foraDaLista, tiradaEm: f.tiradaEm, criadoEm: new Date().toISOString(),
-          blob: f.blob, tentativas: 0
+          blob: f.blob, tentativas: 0, substituirAntes: refazerEm || undefined
         });
       }
+      if (refazerEm) {
+        // some da tela na hora: zera as enviadas deste NRO no celular
+        const l = loteAtual(); const v = l && l.veiculos.find(function (x) { return x.nro === st.sel.nro; });
+        if (v) { v.fotos = 0; await N.kvSet('dadosCampo', st.dados); }
+        const guard = (await N.kvGet('enviadasCampo')) || {}; guard[st.loteId + '|' + st.sel.nro] = []; await N.kvSet('enviadasCampo', guard);
+      }
+      st.refazerEm = null;
     } catch (e) {
       $('btnCamConfirmar').disabled = false;
       await modal('Erro ao salvar', 'Não consegui guardar as fotos no celular (' + e.message + '). Verifique o espaço livre.', [{ texto: 'OK', valor: 1 }]);
@@ -833,7 +865,6 @@
     history.back();
     st.envCache = null;
     await recarregarFila();
-    st.ultimoNro = nroFeito;
     toast('NRO ' + nroFeito + ' salvo' + (navigator.onLine ? ' · enviando ' + plural(qtd, 'foto', 'fotos') : ' no celular · envia com sinal'));
     desenhar();
     pedirSyncSegundoPlano();
@@ -851,7 +882,7 @@
   async function enviarFila(manual) {
     if (st.enviando) return;
     await recarregarFila();
-    if (!st.filaTotal) { if (manual) toast('Nada para enviar.'); return; }
+    if (!st.filaTotal && !st.acoesTotal) { if (manual) toast('Nada para enviar.'); return; }
     if (!navigator.onLine) { if (manual) toast('Sem sinal. As fotos estão seguras no celular.'); atualizarSelos(); return; }
     st.enviando = true; atualizarSelos();
     try {
@@ -892,7 +923,7 @@
       c.appendChild(img);
       const d = el('div', 'desc');
       d.appendChild(el('div', 'placa', 'NRO ' + f.nro + ' · ' + tipoFoto(pos)));
-      d.appendChild(el('div', 'mod', (nomes[f.loteId] || 'pátio encerrado') + ' · ' + hora(f.tiradaEm) + (f.apagadaCampo ? ' · apagada por você (vai só para a gestão)' : '') + (f.erro ? ' · ' + f.erro : '')));
+      d.appendChild(el('div', 'mod', (nomes[f.loteId] || 'pátio encerrado') + ' · ' + hora(f.tiradaEm) + (f.apagadaCampo ? ' · apagada por você (vai só para a gestão)' : '') + (f.substituida ? ' · substituída (vai só para a gestão)' : '') + (f.erro ? ' · ' + f.erro : '')));
       c.appendChild(d);
       if (f.travada) {
         const col = el('div');
@@ -906,8 +937,8 @@
         col.appendChild(tentar); col.appendChild(apagar); c.appendChild(col);
       } else {
         const enviando = st.enviando && navigator.onLine;
-        const w = el('span', 'tag ' + (enviando ? 'azul' : 'amarelo')); w.appendChild(ic(enviando ? 'sync' : (navigator.onLine ? 'upload' : 'semsinal'), enviando ? 'girar' : ''));
-        w.appendChild(document.createTextNode(enviando ? 'Enviando' : (navigator.onLine ? 'Na fila' : 'Aguardando sinal'))); d.appendChild(w);
+        const w = el('span', 'tag ' + (enviando ? 'azul' : 'amarelo')); w.appendChild(ic(enviando ? 'sync' : 'upload', enviando ? 'girar' : ''));
+        w.appendChild(document.createTextNode(enviando ? 'Enviando' : 'Aguardando envio')); d.appendChild(w);
       }
       box.appendChild(c);
     });

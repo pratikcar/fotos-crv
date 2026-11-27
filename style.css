@@ -154,7 +154,7 @@ input:focus, select:focus { border-color: var(--primaria); outline: none; }
 .veiculo-topo .modelo { font-size: 17px; font-weight: 600; }
 .acao-veiculo { position: sticky; bottom: 0; padding: 12px 0 calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--fundo) 75%, transparent); margin-top: 12px; display: grid; gap: 10px; }
 .acao-veiculo .btn { min-height: 60px; font-size: 19px; }
-.galeria { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.galeria { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .foto-cartao { background: var(--painel); border: 1px solid var(--borda); border-radius: 14px; padding: 8px; display: flex; flex-direction: column; gap: 6px; box-shadow: var(--sombra); font-size: 14px; }
 .foto-cartao img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; background: var(--cinza-claro); cursor: zoom-in; display: block; }
 .foto-grande { max-width: 96vw; max-height: 90vh; border-radius: 10px; margin: auto; }
@@ -677,3 +677,33 @@ body.com-gaveta .kpi .kpi-rot { white-space: nowrap; overflow: hidden; text-over
 .barra { background: #cbd5e1; }
 [data-tema="escuro"] .barra { background: #334155; }
 :root:not([data-tema="escuro"]) .suave { color: #475569; }
+
+/* ===== v1.1.1 ===== */
+html { scrollbar-gutter: stable; }
+.tag.laranja { background: #ffedd5; color: #7c2d12; border-color: #fdba74; }
+[data-tema="escuro"] .tag.laranja { background: #431407; color: #fed7aa; border-color: #9a3412; }
+.veiculo-topo .linha-placa { display: flex; align-items: center; gap: 10px; }
+.veiculo-topo .placa-vis { width: auto; min-width: 200px; max-width: 260px; }
+.veiculo-topo .uf { font-weight: 800; font-size: 15px; padding: 4px 10px; border-radius: 8px; background: var(--cinza-claro); color: var(--texto); }
+.nota-dificil { font-size: 15px; color: #7c2d12; background: #fff7ed; border: 1px solid #fdba74; border-radius: 10px; padding: 8px 12px; }
+[data-tema="escuro"] .nota-dificil { color: #fed7aa; background: #431407; border-color: #9a3412; }
+.foto-cartao.aguardando { border: 3px dashed #d97706; }
+.foto-cartao.falhou { border: 3px dashed #dc2626; }
+.foto-cartao .tag { align-self: flex-start; margin-top: 4px; }
+.acao-veiculo .btn.discreto { min-height: 48px; font-size: 15px; font-weight: 600; background: transparent; border-style: dashed; margin-top: 6px; }
+/* "Sem placa" com a mesma largura de uma placa */
+.item .desc .placa { min-width: 9.5em; display: inline-block; }
+.item .desc .placa.sem { color: var(--suave); font-weight: 700; }
+.placa-vis.sem { min-width: 128px; }
+.veiculo-topo .placa-vis.sem { min-width: 200px; }
+#listaIds { padding-bottom: 24px; }
+.item { min-width: 0; }
+/* gestão: painéis (Baixar, Editar pátio…) como janela no centro */
+#gaveta.janela { inset: 0; top: 0; width: auto; max-width: none; background: rgba(15, 23, 42, .55); border: 0; box-shadow: none; display: flex; align-items: flex-start; justify-content: center; padding: 8vh 16px 40px; z-index: 40; overflow-y: auto; }
+#gaveta.janela #gavetaConteudo { width: min(560px, 100%); background: var(--fundo); border-radius: 18px; padding: 6px !important; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); }
+#gaveta.janela #gavetaConteudo > .painel-baixar:first-child { margin: 0 !important; box-shadow: none; }
+#gaveta.janela .gaveta-fechar { position: absolute !important; top: calc(8vh + 16px) !important; right: auto !important; left: calc(50% + min(560px, 100vw - 32px) / 2 - 60px) !important; z-index: 2; }
+.sub-sit { font-size: 12px; color: var(--suave); margin-top: 3px; }
+.chip-filtro.ativo { background: #ffedd5; color: #7c2d12; border-color: #fdba74; }
+.gaveta .nota-dificil { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.placa-vis.peq { min-width: 118px; }

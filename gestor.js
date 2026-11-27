@@ -78,6 +78,7 @@
   // ---------- pátios (layout D: escolher pátio → painel com indicadores, tabela e gaveta) ----------
   $('btnRecarregar').addEventListener('click', function () { carregarLotes(); });
   $('btnFecharGaveta').addEventListener('click', fecharGaveta);
+  $('gaveta').addEventListener('click', function (e) { if (e.target === $('gaveta') && $('gaveta').classList.contains('janela')) fecharGaveta(); });
   document.addEventListener('keydown', function (e) {
     if (document.querySelector('.modal-fundo')) return;
     if (e.key === 'Escape') fecharGaveta();
@@ -140,9 +141,9 @@
     return p;
   }
   function guardarPatio(id) { st.loteSel = id; try { if (id) localStorage.setItem('fotosCrvPatio', id); else localStorage.removeItem('fotosCrvPatio'); } catch (e) { /* sem armazenamento */ } }
-  function mostrarGaveta() { $('gaveta').classList.remove('oculto'); document.body.classList.add('com-gaveta'); }
+  function mostrarGaveta() { $('gaveta').classList.remove('oculto', 'janela'); document.body.classList.add('com-gaveta'); }
   function fecharGaveta() {
-    $('gaveta').classList.add('oculto'); document.body.classList.remove('com-gaveta'); $('gavetaConteudo').textContent = ''; $('gavetaConteudo').dataset.painel = '';
+    $('gaveta').classList.add('oculto'); $('gaveta').classList.remove('janela'); document.body.classList.remove('com-gaveta'); $('gavetaConteudo').textContent = ''; $('gavetaConteudo').dataset.painel = '';
     st.nroSel = null;
     document.querySelectorAll('#painelPatio tr.sel').forEach(function (x) { x.classList.remove('sel'); });
   }
@@ -197,7 +198,7 @@
   function situacao(v) {
     if (v.naoDestinar) return 'bloq';
     if (v.foraDaLista) return 'fora';
-    return v.fotos ? 'fotografado' : 'pendente';
+    return v.status === 'fotografado' ? 'fotografado' : 'pendente';
   }
   const ROTULO = { bloq: ['vermelho', 'NÃO DESTINAR', 'bloq'], fora: ['amarelo', 'Fora da lista', 'alerta'], fotografado: ['verde', 'Fotografado', 'check'], pendente: ['', 'Pendente', 'pendente'] };
 
@@ -206,7 +207,7 @@
     st.patioAberto = l.loteId;
     $('seletorPatios').classList.add('oculto');
     const pp = $('painelPatio'); pp.classList.remove('oculto');
-    if (mudou) { st.filtro = null; st.busca = ''; fecharGaveta(); vazio(pp, 'Carregando ' + l.patio + '…'); }
+    if (mudou) { st.filtro = null; st.busca = ''; st.soDificil = false; fecharGaveta(); vazio(pp, 'Carregando ' + l.patio + '…'); }
     let vs, fotos;
     try {
       vs = await api('veiculosLote', { loteId: l.loteId });
@@ -354,6 +355,7 @@
       }).forEach(function (v) {
         const k = situacao(v);
         if (st.filtro !== 'todos' && k !== st.filtro) return;
+        if (st.filtro === 'fotografado' && st.soDificil && !v.dificil) return;
         if (st.cat && v.categoria !== st.cat) return;
         if (q && norm(v.nro + ' ' + v.placa + ' ' + v.modelo + ' ' + v.cor).indexOf(q) < 0) return;
         n++;
@@ -365,7 +367,7 @@
         tr.appendChild(el('td', null, [v.modelo, v.cor].filter(Boolean).join(' · ') || '—'));
         const tdc = el('td'); const sc = el('span', 'td-fotos'); sc.appendChild(ic(v.categoria === 'motos' ? 'moto' : v.categoria === 'carros' ? 'carro' : 'outros', 'p')); sc.appendChild(document.createTextNode(CAT[v.categoria] || v.categoria)); tdc.appendChild(sc); tr.appendChild(tdc);
         const tdf = el('td'); const sf = el('span', 'td-fotos'); sf.appendChild(ic('foto', 'p')); sf.appendChild(document.createTextNode(String(nf(v)))); tdf.appendChild(sf); tr.appendChild(tdf);
-        const td = el('td'); td.appendChild(etiqueta(k)); tr.appendChild(td);
+        const td = el('td'); td.appendChild(etiqueta(k)); if (v.marcacao) td.appendChild(el('div', 'sub-sit', 'marcado pela gestão')); tr.appendChild(td);
         const ts = el('td', 'td-seta'); ts.appendChild(ic('seta', 'p')); tr.appendChild(ts);
         const abrir = function () { marcarLinha(v.nro); abrirVeiculo(v); };
         tr.addEventListener('click', abrir);
@@ -380,6 +382,13 @@
         chip.addEventListener('click', function () { st.filtro = 'todos'; st.cat = ''; selCat.value = ''; kpis.querySelectorAll('.kpi[data-filtro]').forEach(function (x) { x.classList.toggle('ativo', x.dataset.filtro === 'todos'); }); desenhar(); });
         contagem.appendChild(document.createTextNode(' ')); contagem.appendChild(chip);
       }
+      const nDif = vs.filter(function (v) { return v.dificil && situacao(v) === 'fotografado'; }).length;
+      if (st.filtro === 'fotografado' && nDif) {
+        const bd = botao('btn pequeno chip-filtro' + (st.soDificil ? ' ativo' : ''), 'alerta', (st.soDificil ? 'Só difícil acesso ×' : 'Só difícil acesso (' + nDif + ')'));
+        bd.setAttribute('aria-pressed', st.soDificil ? 'true' : 'false');
+        bd.addEventListener('click', function () { st.soDificil = !st.soDificil; desenhar(); });
+        contagem.appendChild(document.createTextNode(' ')); contagem.appendChild(bd);
+      }
       if (!n) { const tr = el('tr'); const td = el('td', 'vazio', 'Nenhum veículo neste filtro.'); td.colSpan = 7; tr.appendChild(td); tab.appendChild(tr); }
     }
     desenhar();
@@ -391,6 +400,10 @@
 
   // recarrega o pátio aberto mantendo filtro, busca e a gaveta
   async function recarregarPatio() {
+    if ($('gaveta').classList.contains('janela') && /^(resetar|editar|excluir)$/.test($('gavetaConteudo').dataset.painel)) {
+      const m = $('gavetaConteudo').querySelector('.ok'); if (m && m.textContent) toast(m.textContent);
+      fecharGaveta();
+    }
     let lotes;
     try { lotes = await api('listarLotes', { incluirEncerrados: true }); } catch (e) { alert(e.message); return; }
     st.lotes = lotes;
@@ -431,7 +444,13 @@
     const lp = el('div', 'linha-btns'); lp.style.marginTop = '0'; lp.appendChild(placaVis(v.placa, v.uf)); if (v.uf) lp.appendChild(el('span', 'tag', 'UF ' + v.uf)); cab.appendChild(lp);
     cab.appendChild(el('div', null, [v.modelo, v.cor].filter(Boolean).join(' · ') || 'Modelo não informado'));
     cab.appendChild(el('div', 'suave', [CAT[v.categoria], v.chassi ? 'chassi ' + v.chassi : ''].filter(Boolean).join(' · ')));
-    if (v.apagadasCampo) cab.appendChild(el('div', 'suave', v.apagadasCampo + ' foto(s) apagada(s) pelo campo — vão no .zip marcadas como _APAGADA-PELO-CAMPO'));
+    if (v.apagadasCampo) cab.appendChild(el('div', 'suave', v.apagadasCampo + ' foto(s) apagada(s) ou substituída(s) pelo campo — vão no .zip com _APAGADA-PELO-CAMPO ou _SUBSTITUIDA'));
+    if (v.dificil) {
+      const nd = el('div', 'nota-dificil'); nd.appendChild(ic('alerta', 'p'));
+      nd.appendChild(document.createTextNode(' Difícil acesso' + (v.dificilMotivo ? ': ' + v.dificilMotivo : '') + ' · conta como fotografado sem foto'));
+      cab.appendChild(nd);
+    }
+    if (v.marcacao) cab.appendChild(el('div', 'suave', 'Situação marcada à mão pelo administrador (' + (v.marcacao === 'fotografado' ? 'fotografado' : 'pendente') + ').'));
     box.appendChild(cab);
 
     const fs = st.ctx.fotosPorNro[v.nro] || [];
@@ -494,6 +513,31 @@
     const bEd = botao('btn pequeno cinza', 'editar', 'Editar veículo');
     bEd.addEventListener('click', function () { formEditarVeiculo(areaV, v); });
     av.appendChild(bEd);
+    if (v.dificil && !v.naoDestinar) {
+      const bDf = botao('btn pequeno cinza', 'resetar', 'Desfazer difícil acesso');
+      bDf.addEventListener('click', async function () {
+        if (!(await confirmar('Desfazer difícil acesso do NRO ' + v.nro + '?', 'Ele volta a ser ' + (fs.length ? 'fotografado pelas fotos que tem.' : 'PENDENTE para o campo.'), 'Desfazer'))) return;
+        bDf.disabled = true;
+        try { await api('dificilAcesso', { loteId: l.loteId, nro: v.nro, dificil: false }); toast('Difícil acesso desfeito'); recarregarPatio(); }
+        catch (e) { alert(e.message); bDf.disabled = false; }
+      });
+      av.appendChild(bDf);
+    }
+    if (ehAdmin() && !v.naoDestinar && !v.foraDaLista) {
+      const paraFoto = situacao(v) !== 'fotografado';
+      const bMs = botao('btn pequeno cinza', paraFoto ? 'check' : 'pendente', paraFoto ? 'Marcar como fotografado' : 'Voltar para pendente');
+      bMs.title = 'Só administrador';
+      bMs.addEventListener('click', async function () {
+        const txt = paraFoto
+          ? 'O NRO ' + v.nro + ' passa para Fotografados mesmo ' + (fs.length ? 'com as fotos que tem.' : 'sem fotos.')
+          : 'O NRO ' + v.nro + ' volta para Pendentes e aparece de novo para o campo.' + (fs.length ? ' As ' + fs.length + ' foto(s) continuam guardadas e baixáveis.' : '');
+        if (!(await confirmar(paraFoto ? 'Marcar como fotografado?' : 'Voltar para pendente?', txt, paraFoto ? 'Marcar como fotografado' : 'Voltar para pendente'))) return;
+        bMs.disabled = true;
+        try { await api('marcarSituacao', { loteId: l.loteId, nro: v.nro, situacao: paraFoto ? 'fotografado' : 'pendente' }); toast('NRO ' + v.nro + (paraFoto ? ' marcado como fotografado' : ' voltou para pendente')); recarregarPatio(); }
+        catch (e) { alert(e.message); bMs.disabled = false; }
+      });
+      av.appendChild(bMs);
+    }
     if (fs.length) {
       const bRes = botao('btn pequeno contorno-vermelho perigo-dir', 'resetar', 'Resetar NRO');
       bRes.addEventListener('click', async function () {
@@ -594,7 +638,11 @@
 
   // ---------- editar / excluir pátio ----------
   function abrirPainel(box, nome) {
-    box.textContent = ''; box.dataset.painel = nome; mostrarGaveta(); return true;
+    box.textContent = ''; box.dataset.painel = nome;
+    document.querySelectorAll('#painelPatio tr.sel').forEach(function (x) { x.classList.remove('sel'); });
+    st.nroSel = null;
+    $('gaveta').classList.add('janela'); $('gaveta').classList.remove('oculto'); document.body.classList.remove('com-gaveta');
+    return true;
   }
 
   function painelEditar(l, box) {
@@ -764,10 +812,10 @@
       if (/^[=+\-@]/.test(s)) s = "'" + s; // evita fórmula ao abrir no Excel
       return '"' + s.replace(/"/g, '""') + '"';
     };
-    const linhas = [['NRO', 'Categoria', 'Placa', 'UF', 'Modelo', 'Cor', 'Chassi', 'Situação', 'Fotos', 'Apagadas pelo campo'].map(esc).join(';')];
+    const linhas = [['NRO', 'Categoria', 'Placa', 'UF', 'Modelo', 'Cor', 'Chassi', 'Situação', 'Fotos', 'Apagadas/substituídas pelo campo', 'Difícil acesso', 'Marcado à mão'].map(esc).join(';')];
     vs.slice().sort(function (a, b) { return Number(a.nro) - Number(b.nro); }).forEach(function (v) {
       const sit = v.naoDestinar ? 'NÃO DESTINAR' : (v.foraDaLista ? 'fora da lista' : v.status);
-      linhas.push([v.nro, v.categoria, v.placa, v.uf, v.modelo, v.cor, v.chassi, sit, v.fotos, v.apagadasCampo || 0].map(esc).join(';'));
+      linhas.push([v.nro, v.categoria, v.placa, v.uf, v.modelo, v.cor, v.chassi, sit, v.fotos, v.apagadasCampo || 0, v.dificil ? ('sim' + (v.dificilMotivo ? ' - ' + v.dificilMotivo : '')) : '', v.marcacao ? 'sim' : ''].map(esc).join(';'));
     });
     return '﻿' + linhas.join('\r\n');
   }
@@ -888,9 +936,12 @@
 
   // ---------- usuários (admin) ----------
   async function carregarUsuarios() {
-    const tab = $('tabelaUsuarios'); tab.textContent = '';
+    const tab = $('tabelaUsuarios');
+    const meu = st.seqUsuarios = (st.seqUsuarios || 0) + 1;
     let us;
     try { us = await api('listarUsuarios', {}); } catch (e) { $('uErro').textContent = e.message; return; }
+    if (meu !== st.seqUsuarios) return; // outra carga mais nova já está desenhando
+    tab.textContent = '';
     const cab = el('tr'); ['Usuário', 'Nome', 'Acesso', 'Situação', ''].forEach(function (h) { cab.appendChild(el('th', null, h)); }); tab.appendChild(cab);
     us.forEach(function (u) {
       const tr = el('tr', st.usuarioSalvo === u.usuario ? 'linha-salva' : '');

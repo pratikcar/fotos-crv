@@ -80,7 +80,7 @@
 
   /** Atualiza o cache local da lista quando uma foto chega ao servidor. */
   async function marcarEnviadoLocal(item) {
-    if (item.apagadaCampo) return; // foi apagada pelo campo: vai só para a gestão
+    if (item.apagadaCampo || item.substituida) return; // vai só para a gestão
     const dados = await kvGet('dadosCampo');
     if (!dados || !dados.lotes) return;
     const lote = dados.lotes.find(function (l) { return l.loteId === item.loteId; });
@@ -88,7 +88,22 @@
     let v = lote.veiculos.find(function (x) { return x.nro === item.nro; });
     if (!v) { v = { nro: item.nro, categoria: item.categoria, foraDaLista: true, fotos: 0, naoDestinar: false }; lote.veiculos.push(v); }
     v.status = 'fotografado';
-    v.fotos = (v.fotos || 0) + 1;
+    v.fotos = (Number(v.fotos) || 0) + 1;
+    v.dificil = false; // foto nova tira o "difícil acesso"
+    if (v.marcacao === 'pendente') v.marcacao = '';
+    await kvSet('dadosCampo', dados);
+  }
+
+  /** Difícil acesso confirmado no servidor: grava no cache local da lista. */
+  async function marcarAcaoLocal(item) {
+    const dados = await kvGet('dadosCampo');
+    if (!dados || !dados.lotes) return;
+    const lote = dados.lotes.find(function (l) { return l.loteId === item.loteId; });
+    const v = lote && lote.veiculos.find(function (x) { return x.nro === item.nro; });
+    if (!v) return;
+    v.dificil = !!item.dificil; v.dificilMotivo = item.motivo || '';
+    if (item.dificil) { v.status = 'fotografado'; if (v.marcacao === 'pendente') v.marcacao = ''; }
+    else if (!(Number(v.fotos) > 0) && v.marcacao !== 'fotografado') v.status = 'pendente';
     await kvSet('dadosCampo', dados);
   }
 
@@ -105,11 +120,18 @@
       for (const item of fila) {
         if (item.travada) continue; // erro permanente, aguarda ação do usuário
         try {
+          if (item.tipo === 'acao') {
+            await chamarApi(item.acao, { loteId: item.loteId, nro: item.nro, dificil: !!item.dificil, motivo: item.motivo || '' }, token);
+            await filaDel(item.uuid);
+            await marcarAcaoLocal(item);
+            continue;
+          }
           const imagem = await blobParaBase64(item.blob);
           const hash = await shaBlob(item.blob);
           const resp = await chamarApi('enviarFoto', {
             uuid: item.uuid, loteId: item.loteId, nro: item.nro, categoria: item.categoria,
-            tiradaEm: item.tiradaEm, foraDaLista: !!item.foraDaLista, imagem: imagem, sha256: hash, ocultaCampo: !!item.apagadaCampo
+            tiradaEm: item.tiradaEm, foraDaLista: !!item.foraDaLista, imagem: imagem, sha256: hash, ocultaCampo: !!item.apagadaCampo,
+            substituida: !!item.substituida, substituirAntes: item.substituirAntes || undefined
           }, token);
           // só apaga do celular se o servidor confirmar a mesma impressão digital
           const confere = resp && (resp.sha256 === hash || (resp.duplicado && !resp.sha256));
