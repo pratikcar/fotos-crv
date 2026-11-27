@@ -180,11 +180,9 @@
     let cls, icone, texto;
     const nf = plural(st.filaTotal, 'foto', 'fotos');
     const aviso = st.aviso && Date.now() < st.aviso.ate ? st.aviso.msg : null;
-    const na = st.acoesTotal || 0;
     if (st.enviando && st.filaTotal) { cls = 'envio'; icone = 'sync'; texto = 'Enviando ' + nf + '…'; }
     else if (st.filaTotal) { cls = 'pend'; icone = on ? 'upload' : 'semsinal'; texto = on ? nf + ' para enviar · toque para ver' : 'Sem sinal · ' + nf + ' no celular'; }
     else if (!on) { cls = 'off'; icone = 'semsinal'; texto = 'Sem sinal · pode continuar fotografando'; }
-    else if (na && !st.enviando) { cls = 'pend'; icone = 'upload'; texto = plural(na, 'marcação', 'marcações') + ' de difícil acesso para enviar · toque para ver'; }
     else { cls = 'ok'; icone = 'check'; texto = 'Tudo enviado'; }
     if (aviso) { texto = aviso; if (cls === 'ok') icone = 'check'; }
     sp.className = 'faixa-sync ' + cls + (aviso ? ' com-aviso' : '');
