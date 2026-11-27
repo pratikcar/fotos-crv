@@ -67,29 +67,47 @@
   // ---------- abas ----------
   document.querySelectorAll('.abas button').forEach(function (b) { b.addEventListener('click', function () { trocarAba(b.dataset.aba); }); });
   function trocarAba(id) {
+    fecharGaveta();
     ['abaLotes', 'abaNovo', 'abaUsuarios', 'abaConta'].forEach(function (a) { $(a).classList.toggle('oculto', a !== id); });
     document.querySelectorAll('.abas button').forEach(function (b) { b.classList.toggle('ativo', b.dataset.aba === id); });
     if (id === 'abaLotes') carregarLotes();
     if (id === 'abaUsuarios') carregarUsuarios();
   }
 
-  // ---------- pátios (3 colunas: pátios | veículos | fotos) ----------
+  // ---------- pátios (layout D: escolher pátio → painel com indicadores, tabela e gaveta) ----------
   $('btnRecarregar').addEventListener('click', function () { carregarLotes(); });
-  st.loteSel = null; st.lotes = [];
+  $('btnFecharGaveta').addEventListener('click', fecharGaveta);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !document.querySelector('.modal-fundo')) fecharGaveta(); });
+  st.lotes = []; st.minis = {};
+  st.loteSel = (function () { try { return localStorage.getItem('fotosCrvPatio'); } catch (e) { return null; } })();
   const norm = function (t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+  const ehAdmin = function () { return st.sessao && st.sessao.papel === 'admin'; };
+  const CAT = { carros: 'Carros', motos: 'Motos', outros: 'Outros' };
   function vazio(box, texto) { box.textContent = ''; box.appendChild(el('p', 'vazio', texto)); }
+  function guardarPatio(id) { st.loteSel = id; try { if (id) localStorage.setItem('fotosCrvPatio', id); else localStorage.removeItem('fotosCrvPatio'); } catch (e) { /* sem armazenamento */ } }
+  function mostrarGaveta() { $('gaveta').classList.remove('oculto'); document.body.classList.add('com-gaveta'); }
+  function fecharGaveta() {
+    $('gaveta').classList.add('oculto'); document.body.classList.remove('com-gaveta'); $('gavetaConteudo').textContent = ''; $('gavetaConteudo').dataset.painel = '';
+    st.nroSel = null;
+    document.querySelectorAll('#painelPatio tr.sel').forEach(function (x) { x.classList.remove('sel'); });
+  }
 
   async function carregarLotes() {
-    const box = $('listaLotes');
-    if (!st.lotes.length) vazio(box, 'Carregando…');
+    if (!st.lotes.length) vazio($('listaLotes'), 'Carregando…');
     let lotes;
     try { lotes = await api('listarLotes', { incluirEncerrados: true }); }
-    catch (e) { box.textContent = ''; box.appendChild(el('p', 'erro', e.message)); return; }
+    catch (e) { $('listaLotes').textContent = ''; $('listaLotes').appendChild(el('p', 'erro', e.message)); return; }
     st.lotes = lotes;
     desenharPatios();
     const l = lotes.find(function (x) { return x.loteId === st.loteSel; });
-    if (l) abrirPatio(l, true);
-    else { st.loteSel = null; vazio($('colLista'), 'Escolha um pátio à esquerda para ver os veículos e as fotos.'); vazio($('colDetalhe'), 'As fotos do veículo aparecem aqui.'); }
+    if (l && !st.escolhendo) abrirPatio(l);
+    else { if (!l) guardarPatio(null); mostrarSeletor(); }
+  }
+
+  function mostrarSeletor() {
+    st.escolhendo = true;
+    fecharGaveta();
+    $('seletorPatios').classList.remove('oculto'); $('painelPatio').classList.add('oculto');
   }
 
   function desenharPatios() {
@@ -102,98 +120,115 @@
       const b = el('button', 'patio-item' + (l.ativo ? '' : ' encerrado') + (l.loteId === st.loteSel ? ' sel' : ''));
       b.dataset.lote = l.loteId;
       b.appendChild(el('div', 'nome', l.patio));
-      b.appendChild(el('div', 'info', (l.numeroLote ? 'Lista ' + l.numeroLote + ' · ' : '') + (l.ativo ? l.fotografados + ' de ' + l.destinaveis : 'encerrado')));
-      if (l.ativo) {
-        const barra = el('div', 'barra'); const p = el('div');
-        p.style.width = (l.destinaveis ? Math.round(100 * l.fotografados / l.destinaveis) : 0) + '%';
-        barra.appendChild(p); b.appendChild(barra);
-      }
-      if (l.naoBaixadas) b.appendChild(el('span', 'tag azul', l.naoBaixadas + ' nova(s)'));
-      b.addEventListener('click', function () { abrirPatio(l, false); });
+      b.appendChild(el('div', 'info', (l.numeroLote ? 'Lista ' + l.numeroLote + ' · ' : '') + (l.ativo ? l.fotografados + ' de ' + l.destinaveis + ' fotografados' : 'encerrado · ' + l.fotos + ' foto(s)')));
+      const barra = el('div', 'barra'); const p = el('div');
+      p.style.width = (l.destinaveis ? Math.round(100 * l.fotografados / l.destinaveis) : 0) + '%';
+      barra.appendChild(p); b.appendChild(barra);
+      if (l.naoBaixadas) b.appendChild(el('span', 'tag azul', l.naoBaixadas + ' foto(s) nova(s)'));
+      b.addEventListener('click', function () { st.escolhendo = false; guardarPatio(l.loteId); abrirPatio(l); });
       box.appendChild(b);
     });
   }
 
   function situacao(v) {
     if (v.naoDestinar) return 'bloq';
-    if (v.refazer) return 'refazer';
     if (v.foraDaLista) return 'fora';
-    return v.status === 'fotografado' ? 'fotografado' : 'pendente';
+    return v.fotos ? 'fotografado' : 'pendente';
   }
-  const ROTULO = { bloq: ['vermelho', 'NÃO DESTINAR'], refazer: ['amarelo', '⚠️ refazer'], fora: ['amarelo', 'fora da lista'], fotografado: ['verde', 'fotografado'], pendente: ['', 'pendente'] };
+  const ROTULO = { bloq: ['vermelho', 'NÃO DESTINAR'], fora: ['amarelo', 'fora da lista'], fotografado: ['verde', 'fotografado'], pendente: ['', 'pendente'] };
 
-  async function abrirPatio(l, recarga) {
-    const mudou = st.loteSel !== l.loteId;
-    st.loteSel = l.loteId;
-    document.querySelectorAll('#listaLotes .patio-item').forEach(function (b) { b.classList.toggle('sel', b.dataset.lote === l.loteId); });
-    const col = $('colLista');
-    const filtroAntes = !mudou && st.filtro, buscaAntes = !mudou && st.busca, nroAntes = !mudou && st.nroSel;
-    if (mudou) { st.filtro = null; st.busca = ''; st.nroSel = null; vazio($('colDetalhe'), 'Toque em um NRO para ver as fotos.'); }
-    if (!recarga) vazio(col, 'Carregando…');
+  async function abrirPatio(l) {
+    const mudou = st.patioAberto !== l.loteId;
+    st.patioAberto = l.loteId;
+    $('seletorPatios').classList.add('oculto');
+    const pp = $('painelPatio'); pp.classList.remove('oculto');
+    if (mudou) { st.filtro = null; st.busca = ''; fecharGaveta(); vazio(pp, 'Carregando ' + l.patio + '…'); }
     let vs, fotos;
     try {
       vs = await api('veiculosLote', { loteId: l.loteId });
       fotos = await api('listarFotos', { loteId: l.loteId, somenteNaoBaixadas: false });
-    } catch (e) { col.textContent = ''; col.appendChild(el('p', 'erro', e.message)); return; }
-    if (st.loteSel !== l.loteId) return;
-    col.textContent = '';
-    const fotosPorNro = {};
-    fotos.forEach(function (f) { const nro = String(f.caminho).split('/')[3]; (fotosPorNro[nro] = fotosPorNro[nro] || []).push(f); });
+    } catch (e) { pp.textContent = ''; pp.appendChild(el('p', 'erro', e.message)); return; }
+    if (st.patioAberto !== l.loteId) return;
+    st.ctx = { l: l, vs: vs, fotosPorNro: {} };
+    fotos.forEach(function (f) { const nro = String(f.caminho).split('/')[3]; (st.ctx.fotosPorNro[nro] = st.ctx.fotosPorNro[nro] || []).push(f); });
+    pp.textContent = '';
 
-    // cabeçalho do pátio com as ações (só aparecem depois de escolher o pátio)
-    const cab = el('div', 'patio-cab');
-    const h = el('h2', null, l.patio + ' ');
-    h.appendChild(el('span', 'tag ' + (l.ativo ? 'verde' : ''), l.ativo ? 'ativo' : 'encerrado'));
-    cab.appendChild(h);
-    cab.appendChild(el('div', 'suave', (l.numeroLote ? 'Lista ' + l.numeroLote + ' · ' : '') + 'criado em ' + data(l.criadoEm) + ' · ' + l.fotos + ' foto(s)' + (l.foraDaLista ? ' · ' + l.foraDaLista + ' fora da lista' : '')));
-    const btns = el('div', 'linha-btns');
+    // linha fina do pátio escolhido (a lista de pátios fica escondida)
+    const faixa = el('div', 'faixa-patio');
+    faixa.appendChild(el('span', 'faixa-nome', '📍 ' + l.patio));
+    faixa.appendChild(el('span', 'suave', (l.numeroLote ? 'Lista ' + l.numeroLote + ' · ' : '') + 'criado em ' + data(l.criadoEm)));
+    faixa.appendChild(el('span', 'tag ' + (l.ativo ? 'verde' : ''), l.ativo ? 'ativo' : 'encerrado'));
+    const bTrocar = el('button', 'btn pequeno cinza', '⇄ Trocar pátio');
+    bTrocar.addEventListener('click', function () { desenharPatios(); mostrarSeletor(); });
+    faixa.appendChild(bTrocar);
+    pp.appendChild(faixa);
+
+    // ações do pátio
+    const acoes = el('div', 'linha-btns acoes-patio');
     const status = el('div', 'suave status-patio');
-    const det = $('colDetalhe');
+    const det = $('gavetaConteudo');
     const bBaixar = el('button', 'btn pequeno verde', '⬇ Baixar fotos' + (l.naoBaixadas ? ' (' + l.naoBaixadas + ' novas)' : ''));
     bBaixar.disabled = !l.fotos;
-    bBaixar.addEventListener('click', function () { marcarNro(null); painelBaixar(l, det, status); });
-    const bEditar = el('button', 'btn pequeno cinza', '✏️ Editar');
-    bEditar.addEventListener('click', function () { marcarNro(null); painelEditar(l, det); });
+    bBaixar.addEventListener('click', function () { marcarLinha(null); painelBaixar(l, det, status); });
+    const bEditar = el('button', 'btn pequeno cinza', '✏️ Editar pátio');
+    bEditar.addEventListener('click', function () { marcarLinha(null); painelEditar(l, det); });
     const bAtivo = el('button', 'btn pequeno ' + (l.ativo ? 'vermelho' : 'cinza'), l.ativo ? 'Encerrar' : 'Reabrir');
     bAtivo.addEventListener('click', async function () {
       if (l.ativo && !confirm('Encerrar o pátio ' + l.patio + (l.numeroLote ? ' (lista ' + l.numeroLote + ')' : '') + '? Ele some do app de campo. Fotos já guardadas no celular ainda serão enviadas.')) return;
       try { await api('definirAtivo', { loteId: l.loteId, ativo: !l.ativo }); carregarLotes(); } catch (e) { alert(e.message); }
     });
-    [bBaixar, bEditar, bAtivo].forEach(function (b) { btns.appendChild(b); });
+    [bBaixar, bEditar, bAtivo].forEach(function (b) { acoes.appendChild(b); });
     if (!l.ativo) {
-      const bExcluir = el('button', 'btn pequeno vermelho', '🗑 Excluir');
-      bExcluir.addEventListener('click', function () { marcarNro(null); painelExcluir(l, det); });
-      btns.appendChild(bExcluir);
+      const bExcluir = el('button', 'btn pequeno vermelho', '🗑 Excluir pátio');
+      bExcluir.addEventListener('click', function () { marcarLinha(null); painelExcluir(l, det); });
+      acoes.appendChild(bExcluir);
     }
-    cab.appendChild(btns); cab.appendChild(status);
-    col.appendChild(cab);
+    if (ehAdmin()) {
+      const bReset = el('button', 'btn pequeno vermelho', '♻ Resetar pátio');
+      bReset.title = 'Só admin';
+      bReset.addEventListener('click', function () { marcarLinha(null); painelResetar(l, det); });
+      acoes.appendChild(bReset);
+    }
+    pp.appendChild(acoes); pp.appendChild(status);
 
-    // filtros + busca
-    const cont = { todos: vs.length };
-    vs.forEach(function (v) { const k = situacao(v); cont[k] = (cont[k] || 0) + 1; });
-    st.filtro = filtroAntes || (cont.fotografado ? 'fotografado' : 'pendente');
-    const FILTROS = [['pendente', 'Pendentes'], ['fotografado', 'Fotografados'], ['refazer', 'Refazer'], ['fora', 'Fora da lista'], ['bloq', 'Não destinar'], ['todos', 'Todos']];
-    const barra = el('div', 'filtros filtros-gestao');
-    const opcional = function (f) { return f !== 'todos' && f !== 'pendente' && f !== 'fotografado'; };
-    FILTROS.forEach(function (fo) {
-      const b = el('button', fo[0] === st.filtro ? 'ativo' : '', fo[1] + ' ' + (cont[fo[0]] || 0));
-      if (opcional(fo[0]) && !cont[fo[0]]) b.classList.add('oculto');
-      b.dataset.filtro = fo[0];
-      b.addEventListener('click', function () { st.filtro = fo[0]; barra.querySelectorAll('button').forEach(function (x) { x.classList.toggle('ativo', x === b); }); desenhar(); });
-      barra.appendChild(b);
+    // indicadores (clicar filtra a tabela)
+    const cont = { todos: vs.length, pendente: 0, fotografado: 0, bloq: 0, fora: 0 };
+    vs.forEach(function (v) { cont[situacao(v)]++; });
+    st.filtro = st.filtro || (cont.fotografado ? 'fotografado' : 'pendente');
+    const kpis = el('div', 'kpis');
+    const KPI = [['pendente', 'Pendentes', ''], ['fotografado', 'Fotografados', 'verde'], ['bloq', 'Não destinar', 'vermelho'], ['fora', 'Fora da lista', 'amarelo'], ['todos', 'Todos', '']];
+    KPI.forEach(function (k) {
+      if (k[0] === 'fora' && !cont.fora) return;
+      const b = el('button', 'kpi ' + k[2] + (st.filtro === k[0] ? ' ativo' : ''));
+      b.dataset.filtro = k[0];
+      b.appendChild(el('div', 'kpi-rot', k[1])); b.appendChild(el('div', 'kpi-num', String(cont[k[0]])));
+      b.addEventListener('click', function () { st.filtro = k[0]; kpis.querySelectorAll('.kpi[data-filtro]').forEach(function (x) { x.classList.toggle('ativo', x === b); }); desenhar(); });
+      kpis.appendChild(b);
     });
-    const busca = el('input'); busca.type = 'search'; busca.placeholder = 'Buscar NRO, placa ou modelo'; busca.value = buscaAntes || '';
-    busca.addEventListener('input', function () { st.busca = busca.value; desenhar(); });
-    col.appendChild(barra); col.appendChild(busca);
-    const lista = el('div', 'lista-nros'); col.appendChild(lista);
+    const kNovas = el('button', 'kpi azul');
+    kNovas.appendChild(el('div', 'kpi-rot', 'Fotos não baixadas')); kNovas.appendChild(el('div', 'kpi-num', String(l.naoBaixadas)));
+    kNovas.title = 'Abrir "Baixar fotos"';
+    kNovas.addEventListener('click', function () { if (l.fotos) { marcarLinha(null); painelBaixar(l, det, status); } });
+    kpis.appendChild(kNovas);
+    pp.appendChild(kpis);
 
-    function marcarNro(nro) {
+    const busca = el('input', 'busca-tabela'); busca.type = 'search'; busca.placeholder = 'Buscar NRO, placa ou modelo'; busca.value = st.busca || '';
+    busca.addEventListener('input', function () { st.busca = busca.value; desenhar(); });
+    pp.appendChild(busca);
+    const wrap = el('div', 'tabela-wrap'); pp.appendChild(wrap);
+    const tab = el('table', 'tabela-veiculos'); wrap.appendChild(tab);
+
+    function marcarLinha(nro) {
       st.nroSel = nro;
-      lista.querySelectorAll('.item').forEach(function (x) { x.classList.toggle('sel', x.dataset.nro === nro); });
+      tab.querySelectorAll('tr[data-nro]').forEach(function (x) { x.classList.toggle('sel', x.dataset.nro === nro); });
     }
+    st.ctx.marcarLinha = marcarLinha;
 
     function desenhar() {
-      lista.textContent = '';
+      tab.textContent = '';
+      const cab = el('tr');
+      ['NRO', 'Placa', 'Veículo', 'Categoria', 'Fotos', 'Situação'].forEach(function (c) { cab.appendChild(el('th', null, c)); });
+      tab.appendChild(cab);
       const q = norm(busca.value.trim());
       let n = 0;
       vs.slice().sort(function (a, b) { return Number(a.nro) - Number(b.nro); }).forEach(function (v) {
@@ -201,94 +236,202 @@
         if (st.filtro !== 'todos' && k !== st.filtro) return;
         if (q && norm(v.nro + ' ' + v.placa + ' ' + v.modelo + ' ' + v.cor).indexOf(q) < 0) return;
         n++;
-        const nf = (fotosPorNro[v.nro] || []).length;
-        const b = el('button', 'item ' + (k === 'fotografado' ? 'feito' : k === 'bloq' ? 'bloq' : k === 'refazer' ? 'local' : '') + (v.nro === st.nroSel ? ' sel' : ''));
-        b.dataset.nro = v.nro;
-        b.appendChild(el('div', 'nro', v.nro));
-        const d = el('div', 'desc');
-        d.appendChild(el('div', 'placa', v.placa || (v.foraDaLista ? 'Fora da lista' : 'Sem placa')));
-        d.appendChild(el('div', 'mod', [v.modelo, v.cor, v.categoria].filter(Boolean).join(' · ') || '—'));
-        b.appendChild(d);
-        b.appendChild(el('div', 'st', k === 'fotografado' || nf ? '🖼 ' + nf : (k === 'refazer' ? '⚠️ refazer' : (k === 'bloq' ? '⛔' : ''))));
-        b.addEventListener('click', function () { marcarNro(v.nro); abrirVeiculo(l, v, fotosPorNro, desenharTudo); });
-        lista.appendChild(b);
+        const tr = el('tr', v.nro === st.nroSel ? 'sel' : '');
+        tr.dataset.nro = v.nro; tr.tabIndex = 0;
+        tr.appendChild(el('td', 'td-nro', v.nro));
+        tr.appendChild(el('td', null, v.placa ? v.placa + (v.uf ? ' · ' + v.uf : '') : '—'));
+        tr.appendChild(el('td', null, [v.modelo, v.cor].filter(Boolean).join(' · ') || '—'));
+        tr.appendChild(el('td', null, CAT[v.categoria] || v.categoria));
+        tr.appendChild(el('td', null, String((st.ctx.fotosPorNro[v.nro] || []).length)));
+        const td = el('td'); td.appendChild(el('span', 'tag ' + ROTULO[k][0], ROTULO[k][1])); tr.appendChild(td);
+        const abrir = function () { marcarLinha(v.nro); abrirVeiculo(v); };
+        tr.addEventListener('click', abrir);
+        tr.addEventListener('keydown', function (e) { if (e.key === 'Enter') abrir(); });
+        tab.appendChild(tr);
       });
-      if (!n) lista.appendChild(el('p', 'vazio', 'Nenhum veículo neste filtro.'));
-    }
-    function desenharTudo() { // após excluir foto: recontar filtros e redesenhar
-      const novo = { todos: vs.length };
-      vs.forEach(function (v) { const k = situacao(v); novo[k] = (novo[k] || 0) + 1; });
-      barra.querySelectorAll('button').forEach(function (b) {
-        const f = b.dataset.filtro;
-        b.textContent = b.textContent.replace(/\s\d+$/, '') + ' ' + (novo[f] || 0);
-        b.classList.toggle('oculto', opcional(f) && !novo[f] && st.filtro !== f);
-      });
-      desenhar();
+      if (!n) { const tr = el('tr'); const td = el('td', 'vazio', 'Nenhum veículo neste filtro.'); td.colSpan = 6; tr.appendChild(td); tab.appendChild(tr); }
     }
     desenhar();
-    if (nroAntes) {
-      const v = vs.find(function (x) { return x.nro === nroAntes; });
-      if (v && det.dataset.painel === 'veiculo') abrirVeiculo(l, v, fotosPorNro, desenharTudo);
+    if (st.nroSel && $('gavetaConteudo').dataset.painel === 'veiculo') {
+      const v = vs.find(function (x) { return x.nro === st.nroSel; });
+      if (v) abrirVeiculo(v); else fecharGaveta();
     }
   }
 
-  function abrirVeiculo(l, v, fotosPorNro, aoMudar) {
-    const box = $('colDetalhe');
+  // recarrega o pátio aberto mantendo filtro, busca e a gaveta
+  async function recarregarPatio() {
+    let lotes;
+    try { lotes = await api('listarLotes', { incluirEncerrados: true }); } catch (e) { alert(e.message); return; }
+    st.lotes = lotes;
+    const l = lotes.find(function (x) { return x.loteId === st.patioAberto; });
+    if (l) abrirPatio(l); else carregarLotes();
+  }
+
+  function abrirVeiculo(v) {
+    const l = st.ctx.l;
+    const box = $('gavetaConteudo');
     box.textContent = ''; box.dataset.painel = 'veiculo';
+    mostrarGaveta();
     const k = situacao(v);
     const cab = el('div', 'veiculo-cab');
     const t = el('h2', null, 'NRO ' + v.nro + ' ');
     t.appendChild(el('span', 'tag ' + ROTULO[k][0], ROTULO[k][1]));
     cab.appendChild(t);
-    cab.appendChild(el('div', 'placa-grande', v.placa || (v.foraDaLista ? 'Fora da lista' : 'Sem placa')));
-    cab.appendChild(el('div', 'suave', [v.modelo, v.cor, v.categoria, v.chassi ? 'chassi ' + v.chassi : ''].filter(Boolean).join(' · ')));
+    cab.appendChild(el('div', 'placa-grande', v.placa ? v.placa + (v.uf ? ' · ' + v.uf : '') : (v.foraDaLista ? 'Fora da lista' : 'Sem placa')));
+    cab.appendChild(el('div', 'suave', [v.modelo, v.cor, CAT[v.categoria], v.chassi ? 'chassi ' + v.chassi : ''].filter(Boolean).join(' · ')));
     if (v.apagadasCampo) cab.appendChild(el('div', 'suave', v.apagadasCampo + ' foto(s) apagada(s) pelo campo — vão no .zip marcadas como _APAGADA-PELO-CAMPO'));
     box.appendChild(cab);
-    const fs = fotosPorNro[v.nro] || [];
-    if (!fs.length) { box.appendChild(el('p', 'vazio', k === 'bloq' ? 'Veículo NÃO DESTINAR — não é fotografado.' : 'Nenhuma foto deste NRO ainda.')); return; }
-    const gal = el('div', 'galeria galeria-gestao'); box.appendChild(gal);
-    fs.forEach(function (f) {
-      const c = el('div', 'foto-cartao');
-      const img = el('img'); img.alt = 'Foto ' + String(f.caminho).split('/').pop(); img.title = 'Clique para ampliar';
-      img.addEventListener('click', function () {
-        api('miniatura', { uuid: f.uuid, grande: true }).then(function (m) { ampliar('data:' + m.tipo + ';base64,' + m.base64); }).catch(function (e) { alert(e.message); });
+
+    const fs = st.ctx.fotosPorNro[v.nro] || [];
+    if (!fs.length) box.appendChild(el('p', 'vazio', k === 'bloq' ? 'Veículo NÃO DESTINAR — não é fotografado.' : 'Nenhuma foto deste NRO ainda.'));
+    else {
+      st.fotoSel = fs.some(function (f) { return f.uuid === st.fotoSel; }) ? st.fotoSel : fs[0].uuid;
+      const grande = el('img', 'foto-visor'); grande.alt = 'Foto selecionada'; grande.title = 'Clique para ampliar';
+      box.appendChild(grande);
+      const legenda = el('div', 'suave'); box.appendChild(legenda);
+      const tira = el('div', 'tira-fotos'); box.appendChild(tira);
+      const acoesFoto = el('div', 'linha-btns'); box.appendChild(acoesFoto);
+      const area = el('div', 'area-acao'); box.appendChild(area);
+
+      const selecionar = function (f) {
+        st.fotoSel = f.uuid;
+        tira.querySelectorAll('img').forEach(function (i) { i.classList.toggle('sel', i.dataset.uuid === f.uuid); });
+        const nome = String(f.caminho).split('/').pop();
+        legenda.textContent = 'Foto ' + (fs.indexOf(f) + 1) + ' de ' + fs.length + ' · ' + nome + (f.baixada ? ' · já baixada' : ' · ainda não baixada');
+        grande.src = st.minis[f.uuid] || '';
+        grande.onclick = function () { api('miniatura', { uuid: f.uuid, grande: true }).then(function (m) { ampliar('data:' + m.tipo + ';base64,' + m.base64); }).catch(function (e) { alert(e.message); }); };
+        acoesFoto.textContent = ''; area.textContent = '';
+        const bEx = el('button', 'btn pequeno vermelho', '🗑 Excluir esta foto');
+        bEx.addEventListener('click', async function () {
+          const ultima = fs.length === 1;
+          if (!confirm('Excluir a foto ' + nome + ' do NRO ' + v.nro + '?\n\nEla vai para a lixeira do Drive (30 dias).' + (ultima ? ' É a única foto: o NRO volta a ficar PENDENTE para o campo.' : ''))) return;
+          bEx.disabled = true;
+          try { await api('excluirFotoGestao', { uuid: f.uuid }); recarregarPatio(); }
+          catch (e) { alert(e.message); bEx.disabled = false; }
+        });
+        const bMov = el('button', 'btn pequeno cinza', '↪ Mover para outro NRO');
+        bMov.addEventListener('click', function () { formMover(area, f, v); });
+        acoesFoto.appendChild(bEx); acoesFoto.appendChild(bMov);
+      };
+      fs.forEach(function (f) {
+        const img = el('img'); img.alt = 'Miniatura ' + String(f.caminho).split('/').pop(); img.dataset.uuid = f.uuid;
+        img.addEventListener('click', function () { selecionar(f); });
+        tira.appendChild(img);
+        const pronto = function (src) { img.src = src; if (st.fotoSel === f.uuid) grande.src = src; };
+        if (st.minis[f.uuid]) pronto(st.minis[f.uuid]);
+        else api('miniatura', { uuid: f.uuid }).then(function (m) { pronto(st.minis[f.uuid] = 'data:' + m.tipo + ';base64,' + m.base64); }).catch(function () { img.alt = 'não carregou'; });
       });
-      c.appendChild(img);
-      const nome = String(f.caminho).split('/').pop();
-      c.appendChild(el('div', 'suave', nome + (f.baixada ? ' · já baixada' : ' · nova')));
-      const b = el('button', 'btn pequeno vermelho', '🗑 Excluir (pedir refazer)');
-      b.addEventListener('click', async function () {
-        if (!confirm('Excluir a foto ' + nome + ' do NRO ' + v.nro + '?\n\nEla vai para a lixeira do Drive (30 dias) e o NRO volta a ficar PENDENTE para o campo tirar foto nova.')) return;
-        b.disabled = true;
-        try {
-          await api('excluirFotoGestao', { uuid: f.uuid });
-          fotosPorNro[v.nro] = fotosPorNro[v.nro].filter(function (x) { return x.uuid !== f.uuid; });
-          v.refazer = true;
-          aoMudar();
-          abrirVeiculo(l, v, fotosPorNro, aoMudar);
-        } catch (e) { alert(e.message); b.disabled = false; }
+      selecionar(fs.find(function (f) { return f.uuid === st.fotoSel; }));
+    }
+
+    // ações do veículo (gestão e admin)
+    box.appendChild(el('div', 'titulo-secao', 'Veículo'));
+    const av = el('div', 'linha-btns'); box.appendChild(av);
+    const areaV = el('div', 'area-acao'); box.appendChild(areaV);
+    const bEd = el('button', 'btn pequeno cinza', '✏️ Editar veículo');
+    bEd.addEventListener('click', function () { formEditarVeiculo(areaV, v); });
+    av.appendChild(bEd);
+    if (fs.length) {
+      const bRes = el('button', 'btn pequeno vermelho', '♻ Resetar NRO');
+      bRes.addEventListener('click', async function () {
+        if (!confirm('Resetar o NRO ' + v.nro + '?\n\nAs ' + fs.length + ' foto(s) dele vão para a lixeira do Drive (30 dias) e ele volta a ficar PENDENTE para o campo.' + (v.foraDaLista ? '\nComo é um NRO fora da lista, ele sai da lista.' : ''))) return;
+        bRes.disabled = true;
+        try { await api('resetarVeiculo', { loteId: l.loteId, nro: v.nro }); recarregarPatio(); }
+        catch (e) { alert(e.message); bRes.disabled = false; }
       });
-      c.appendChild(b);
-      gal.appendChild(c);
-      const cache = st.minis[f.uuid];
-      if (cache) img.src = cache;
-      else api('miniatura', { uuid: f.uuid }).then(function (m) { img.src = st.minis[f.uuid] = 'data:' + m.tipo + ';base64,' + m.base64; }).catch(function () { img.alt = 'não carregou'; });
-    });
+      av.appendChild(bRes);
+    }
   }
-  st.minis = {};
+
+  function formMover(area, f, v) {
+    area.textContent = '';
+    const p = el('div', 'painel-baixar');
+    p.appendChild(el('h3', null, 'Mover ' + String(f.caminho).split('/').pop() + ' para outro NRO'));
+    p.appendChild(el('label', null, 'Pátio'));
+    const sel = el('select');
+    st.lotes.forEach(function (x) { const o = el('option', null, x.patio + (x.numeroLote ? ' · lista ' + x.numeroLote : '') + (x.ativo ? '' : ' (encerrado)')); o.value = x.loteId; sel.appendChild(o); });
+    sel.value = st.ctx.l.loteId; p.appendChild(sel);
+    p.appendChild(el('label', null, 'NRO de destino'));
+    const i = el('input'); i.type = 'text'; i.inputMode = 'numeric'; i.maxLength = 12; p.appendChild(i);
+    p.appendChild(el('p', 'suave', 'A foto muda de pasta no Drive, ganha o nome do novo NRO e volta a contar como "não baixada".'));
+    const msg = el('div', 'erro'); p.appendChild(msg);
+    const b = el('button', 'btn verde', 'Mover foto'); p.appendChild(b);
+    b.addEventListener('click', async function () {
+      const nro = i.value.trim();
+      if (!nro) { msg.textContent = 'Informe o NRO.'; return; }
+      b.disabled = true; msg.textContent = '';
+      try {
+        const r = await api('moverFoto', { uuid: f.uuid, loteId: sel.value, nro: nro });
+        msg.className = 'ok'; msg.textContent = 'Foto movida para o NRO ' + nro + ' como ' + r.nome + '.';
+        setTimeout(recarregarPatio, 900);
+      } catch (e) { msg.className = 'erro'; msg.textContent = e.message; b.disabled = false; }
+    });
+    area.appendChild(p); i.focus();
+  }
+
+  function formEditarVeiculo(area, v) {
+    area.textContent = '';
+    const p = el('div', 'painel-baixar');
+    p.appendChild(el('h3', null, 'Editar NRO ' + v.nro));
+    const campo = function (rot, valor, max) { p.appendChild(el('label', null, rot)); const i = el('input'); i.type = 'text'; i.maxLength = max; i.value = valor || ''; p.appendChild(i); return i; };
+    p.appendChild(el('label', null, 'Categoria'));
+    const cat = el('select');
+    ['carros', 'motos', 'outros'].forEach(function (c) { const o = el('option', null, CAT[c]); o.value = c; cat.appendChild(o); });
+    cat.value = v.categoria; p.appendChild(cat);
+    const iPlaca = campo('Placa', v.placa, 10), iUf = campo('UF', v.uf, 2), iMod = campo('Modelo', v.modelo, 80), iCor = campo('Cor', v.cor, 30);
+    const lab = el('label', 'opcao'); const nd = el('input'); nd.type = 'checkbox'; nd.checked = !!v.naoDestinar;
+    lab.appendChild(nd); lab.appendChild(document.createTextNode(' NÃO DESTINAR (não pode sair do CRV)')); p.appendChild(lab);
+    const fs = st.ctx.fotosPorNro[v.nro] || [];
+    if (fs.length) p.appendChild(el('p', 'suave', 'Trocando a categoria, as ' + fs.length + ' foto(s) mudam de pasta e voltam a contar como "não baixadas".'));
+    const msg = el('div', 'erro'); p.appendChild(msg);
+    const b = el('button', 'btn verde', 'Salvar'); p.appendChild(b);
+    b.addEventListener('click', async function () {
+      b.disabled = true; msg.textContent = '';
+      try {
+        await api('editarVeiculo', { loteId: st.ctx.l.loteId, nro: v.nro, categoria: cat.value, placa: iPlaca.value.trim(), uf: iUf.value.trim(), modelo: iMod.value.trim(), cor: iCor.value.trim(), naoDestinar: nd.checked });
+        msg.className = 'ok'; msg.textContent = 'Salvo.';
+        setTimeout(recarregarPatio, 700);
+      } catch (e) { msg.className = 'erro'; msg.textContent = e.message; b.disabled = false; }
+    });
+    area.appendChild(p);
+  }
+
+  function painelResetar(l, box) {
+    abrirPainel(box, 'resetar');
+    const p = el('div', 'painel-baixar painel-perigo');
+    p.appendChild(el('h3', 'erro', '♻ Resetar o pátio ' + l.patio));
+    p.appendChild(el('p', null, 'Todas as ' + l.fotos + ' foto(s) deste pátio vão para a lixeira do Google Drive (recuperáveis por 30 dias) e todos os NROs voltam a ficar PENDENTES. A lista de veículos continua igual; NROs digitados fora da lista são removidos.'));
+    if (l.naoBaixadas) p.appendChild(el('p', 'aviso', '⚠️ ' + l.naoBaixadas + ' foto(s) ainda NÃO foram baixadas. Baixe antes se precisar delas.'));
+    p.appendChild(el('label', null, 'Para confirmar, digite o nome do pátio: ' + l.patio));
+    const i = el('input'); i.type = 'text'; i.autocomplete = 'off'; p.appendChild(i);
+    const msg = el('div', 'erro'); p.appendChild(msg);
+    const b = el('button', 'btn vermelho', 'Resetar pátio'); b.disabled = true; p.appendChild(b);
+    i.addEventListener('input', function () { b.disabled = i.value.trim().toUpperCase() !== String(l.patio).trim().toUpperCase(); });
+    b.addEventListener('click', async function () {
+      b.disabled = true; msg.textContent = '';
+      try {
+        const r = await api('resetarLote', { loteId: l.loteId, confirmacao: i.value.trim() });
+        msg.className = 'ok'; msg.textContent = 'Pátio resetado. ' + r.fotosNaLixeira + ' foto(s) foram para a lixeira do Drive.';
+        setTimeout(recarregarPatio, 1500);
+      } catch (e) { msg.className = 'erro'; msg.textContent = e.message; b.disabled = false; }
+    });
+    box.appendChild(p); i.focus();
+  }
 
   function ampliar(src) {
     const fundo = el('div', 'modal-fundo');
     const img = el('img', 'foto-grande'); img.src = src; img.alt = 'Foto ampliada';
     fundo.appendChild(img);
-    fundo.addEventListener('click', function () { fundo.remove(); });
-    document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { fundo.remove(); document.removeEventListener('keydown', esc); } });
+    const fechar = function () { fundo.remove(); document.removeEventListener('keydown', esc); };
+    const esc = function (e) { if (e.key === 'Escape') { e.stopPropagation(); fechar(); } };
+    fundo.addEventListener('click', fechar);
+    document.addEventListener('keydown', esc, true);
     document.body.appendChild(fundo);
   }
 
   // ---------- editar / excluir pátio ----------
   function abrirPainel(box, nome) {
-    box.textContent = ''; box.dataset.painel = nome; return true;
+    box.textContent = ''; box.dataset.painel = nome; mostrarGaveta(); return true;
   }
 
   function painelEditar(l, box) {
@@ -309,7 +452,7 @@
       try {
         await api('editarLote', { loteId: l.loteId, patio: iPatio.value.trim(), numeroLote: iLista.value.trim() });
         msg.className = 'ok'; msg.textContent = 'Alterações salvas.';
-        setTimeout(carregarLotes, 1200);
+        setTimeout(recarregarPatio, 1200);
       } catch (e) { msg.textContent = e.message; b.disabled = false; }
     });
     box.appendChild(p);
@@ -457,7 +600,7 @@
     };
     const linhas = [['NRO', 'Categoria', 'Placa', 'UF', 'Modelo', 'Cor', 'Chassi', 'Situação', 'Fotos', 'Apagadas pelo campo'].map(esc).join(';')];
     vs.slice().sort(function (a, b) { return Number(a.nro) - Number(b.nro); }).forEach(function (v) {
-      const sit = v.naoDestinar ? 'NÃO DESTINAR' : (v.refazer ? 'refazer' : (v.foraDaLista ? 'fora da lista' : v.status));
+      const sit = v.naoDestinar ? 'NÃO DESTINAR' : (v.foraDaLista ? 'fora da lista' : v.status);
       linhas.push([v.nro, v.categoria, v.placa, v.uf, v.modelo, v.cor, v.chassi, sit, v.fotos, v.apagadasCampo || 0].map(esc).join(';'));
     });
     return '﻿' + linhas.join('\r\n');

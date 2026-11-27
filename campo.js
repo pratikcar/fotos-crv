@@ -122,21 +122,19 @@
   function estadoVeiculo(lote, v) {
     if (v.naoDestinar) return 'bloq';
     if (st.pendLocal[lote.loteId + '|' + v.nro]) return 'local';
-    if (v.refazer) return 'refazer';
     if (v.status === 'fotografado') return 'feito';
     return 'pendente';
   }
   function contar(lote, categoria) {
-    let total = 0, feitos = 0, refazer = 0;
+    let total = 0, feitos = 0;
     lote.veiculos.forEach(function (v) {
       if (categoria && v.categoria !== categoria) return;
       if (v.naoDestinar || v.foraDaLista) return;
       total++;
       const e = estadoVeiculo(lote, v);
       if (e === 'feito' || e === 'local') feitos++;
-      if (e === 'refazer') refazer++;
     });
-    return { total: total, feitos: feitos, refazer: refazer };
+    return { total: total, feitos: feitos };
   }
 
   function atualizarSelos() {
@@ -170,8 +168,7 @@
       $('loginSenha').value = '';
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
       await atualizarListas(true);
-      history.replaceState({ tela: 'telaPatios' }, '');
-      mostrar('telaPatios', false);
+      abrirInicio();
       enviarFila();
     } catch (e) {
       $('loginErro').textContent = e.code === 'REDE' ? 'Sem internet. O primeiro login precisa de conexão.' : e.message;
@@ -204,11 +201,33 @@
     desenhar();
   }
 
+  // o pátio escolhido fica guardado: na próxima vez o app abre direto nele
+  function guardarPatio(id) { try { if (id) localStorage.setItem('fotosCrvPatioCampo', id); else localStorage.removeItem('fotosCrvPatioCampo'); } catch (e) { /* sem armazenamento */ } }
+  function patioGuardado() { try { return localStorage.getItem('fotosCrvPatioCampo'); } catch (e) { return null; } }
+  function abrirInicio() {
+    const id = patioGuardado();
+    const existe = id && st.dados && st.dados.lotes.some(function (l) { return l.loteId === id; });
+    history.replaceState({ tela: 'telaPatios' }, '');
+    if (existe) { st.loteId = id; st.categoria = null; st.sel = null; mostrar('telaCategorias', true); }
+    else { guardarPatio(null); mostrar('telaPatios', false); }
+  }
+
   function desenharPatios() {
     $('titulo').textContent = 'Olá, ' + (st.sessao ? st.sessao.nome : '');
     const box = $('listaPatios');
     box.textContent = '';
     const lotes = (st.dados && st.dados.lotes) || [];
+    const atual = lotes.find(function (l) { return l.loteId === st.loteId; });
+    $('telaPatios').querySelector('.titulo-secao').textContent = largo() && atual && !st.trocandoPatio ? 'Pátio' : 'Pátios ativos';
+    if (largo() && atual && !st.trocandoPatio) { // tela larga: só o pátio atual, numa linha
+      const f = el('div', 'faixa-patio');
+      f.appendChild(el('span', 'faixa-nome', '📍 ' + atual.patio));
+      const bt = el('button', 'btn pequeno cinza', '⇄ Trocar');
+      bt.addEventListener('click', function () { st.trocandoPatio = true; desenharPatios(); });
+      f.appendChild(bt); box.appendChild(f);
+      $('atualizadoEm').textContent = st.dados ? 'Lista atualizada em ' + hora(st.dados.geradoEm) : '';
+      return;
+    }
     if (!lotes.length) {
       const c = el('div', 'cartao');
       c.appendChild(el('p', null, 'Nenhum pátio ativo no momento.'));
@@ -222,7 +241,7 @@
       b.appendChild(el('div', 'info', (l.numeroLote ? 'Lista ' + l.numeroLote + ' · ' : '') + c.feitos + ' de ' + c.total + ' fotografados'));
       const barra = el('div', 'barra'); const p = el('div'); p.style.width = (c.total ? Math.round(100 * c.feitos / c.total) : 0) + '%';
       barra.appendChild(p); b.appendChild(barra);
-      b.addEventListener('click', function () { st.loteId = l.loteId; st.categoria = null; st.sel = null; $('busca').value = ''; mostrar('telaCategorias', true); });
+      b.addEventListener('click', function () { st.trocandoPatio = false; guardarPatio(l.loteId); st.loteId = l.loteId; st.categoria = null; st.sel = null; $('busca').value = ''; mostrar('telaCategorias', true); });
       box.appendChild(b);
     });
     $('atualizadoEm').textContent = st.dados ? 'Lista atualizada em ' + hora(st.dados.geradoEm) : '';
@@ -237,18 +256,24 @@
       mostrar('telaPatios', false); return;
     }
     if (largo()) $('telaCategorias').classList.remove('oculto');
-    else $('titulo').textContent = l.patio + (l.numeroLote ? ' · lista ' + l.numeroLote : '');
+    else {
+      $('titulo').textContent = l.patio + (l.numeroLote ? ' · lista ' + l.numeroLote : '');
+      const f = el('div', 'faixa-patio');
+      f.appendChild(el('span', 'faixa-nome', '📍 ' + l.patio));
+      const bt = el('button', 'btn pequeno cinza', '⇄ Trocar pátio');
+      bt.addEventListener('click', function () { st.loteId = null; history.replaceState({ tela: 'telaPatios' }, ''); mostrar('telaPatios', false); });
+      f.appendChild(bt); box.appendChild(f);
+    }
     ['carros', 'motos', 'outros'].forEach(function (cat) {
       const c = contar(l, cat);
       const b = el('button', 'botao-grande' + (largo() && st.categoria === cat ? ' sel' : ''));
       b.appendChild(el('div', 'nome', CAT_NOMES[cat]));
-      b.appendChild(el('div', 'info', CAT_INFO[cat] + ' · ' + (c.total - c.feitos - c.refazer) + ' pendentes de ' + c.total));
-      if (c.refazer) b.appendChild(el('div', 'info refazer-info', '⚠️ ' + c.refazer + ' para refazer'));
+      b.appendChild(el('div', 'info', CAT_INFO[cat] + ' · ' + (c.total - c.feitos) + ' pendentes de ' + c.total));
       const barra = el('div', 'barra'); const p = el('div'); p.style.width = (c.total ? Math.round(100 * c.feitos / c.total) : 0) + '%';
       barra.appendChild(p); b.appendChild(barra);
       b.addEventListener('click', function () {
         st.categoria = cat; st.sel = null; $('busca').value = '';
-        st.filtro = c.refazer && c.refazer === c.total - c.feitos ? 'refazer' : 'pendentes';
+        st.filtro = 'pendentes';
         if (largo()) { history.replaceState(estadoHist('telaLista'), ''); mostrar('telaLista', false); }
         else mostrar('telaLista', true);
       });
@@ -282,30 +307,26 @@
     box.textContent = '';
     const itens = l.veiculos.filter(function (v) { return v.categoria === st.categoria; })
       .sort(function (a, b) { return Number(a.nro) - Number(b.nro); });
-    const cont = { pendentes: 0, feitos: 0, refazer: 0, todos: 0 };
+    const cont = { pendentes: 0, feitos: 0, todos: 0 };
     itens.forEach(function (v) {
       const e = estadoVeiculo(l, v);
       cont.todos++;
       if (e === 'pendente') cont.pendentes++;
       if (e === 'feito' || e === 'local') cont.feitos++;
-      if (e === 'refazer') cont.refazer++;
     });
-    if (st.filtro === 'refazer' && !cont.refazer) st.filtro = 'pendentes';
-    const NOMES_F = { pendentes: 'Pendentes', feitos: 'Fotografados', refazer: '⚠️ Refazer', todos: 'Todos' };
+    const NOMES_F = { pendentes: 'Pendentes', feitos: 'Fotografados', todos: 'Todos' };
     document.querySelectorAll('#filtros button').forEach(function (x) {
       const f = x.dataset.filtro;
       x.textContent = NOMES_F[f] + ' ' + cont[f];
       x.classList.toggle('ativo', f === st.filtro);
-      x.classList.toggle('oculto', f === 'refazer' && !cont.refazer);
     });
 
     let mostrados = 0;
     itens.forEach(function (v) {
       const e = estadoVeiculo(l, v);
-      if (st.filtro === 'pendentes' && (e === 'feito' || e === 'local' || e === 'refazer')) return;
+      if (st.filtro === 'pendentes' && (e === 'feito' || e === 'local')) return;
       if (st.filtro === 'pendentes' && e === 'bloq' && !(q && q === textoNorm(v.nro))) return; // só aparece se buscar o NRO exato
       if (st.filtro === 'feitos' && !(e === 'feito' || e === 'local')) return;
-      if (st.filtro === 'refazer' && e !== 'refazer') return;
       if (q && textoNorm(v.nro + ' ' + v.placa + ' ' + v.modelo + ' ' + v.cor + ' ' + v.chassi).indexOf(q) < 0) return;
       mostrados++;
       const b = el('button', 'item ' + (e === 'pendente' ? '' : e) + (st.sel && st.sel.nro === v.nro ? ' sel' : ''));
@@ -318,7 +339,6 @@
       if (e === 'bloq') stx = '⛔ NÃO DESTINAR';
       else if (e === 'local') stx = '📱 ' + st.pendLocal[l.loteId + '|' + v.nro] + ' no celular';
       else if (e === 'feito') stx = '✅ ' + v.fotos + ' foto' + (v.fotos === 1 ? '' : 's');
-      else if (e === 'refazer') stx = '⚠️ refazer';
       b.appendChild(el('div', 'st', stx));
       b.addEventListener('click', function () {
         if (e === 'bloq') { toast('NRO ' + v.nro + ': NÃO DESTINAR — não pode sair do CRV.' + (v.motivo ? ' (' + v.motivo + '…)' : '')); return; }
@@ -326,7 +346,7 @@
       });
       box.appendChild(b);
     });
-    if (!mostrados) box.appendChild(el('p', 'suave', st.filtro === 'pendentes' && !q ? (cont.refazer ? 'Nenhum pendente novo. Veja ⚠️ Refazer.' : 'Nenhum pendente nesta categoria. 🎉') : 'Nada encontrado.'));
+    if (!mostrados) box.appendChild(el('p', 'suave', st.filtro === 'pendentes' && !q ? 'Nenhum pendente nesta categoria. 🎉' : 'Nada encontrado.'));
   }
 
   function abrirVeiculo(sel) {
@@ -407,15 +427,14 @@
     const fila = (await N.filaTodos()).filter(function (f) { return f.loteId === l.loteId && f.nro === nro && !f.apagadaCampo; });
     if (meu !== st.galSeq) return;
     const topo = $('veiculoTopo'); topo.textContent = '';
-    const e = v.naoDestinar ? 'bloq' : (fila.length ? 'local' : (v.refazer ? 'refazer' : (v.status === 'fotografado' ? 'feito' : 'pendente')));
+    const e = v.naoDestinar ? 'bloq' : (fila.length ? 'local' : (v.status === 'fotografado' ? 'feito' : 'pendente'));
     const linha = el('div', 'linha-btns'); linha.style.marginTop = '0'; linha.style.alignItems = 'center';
     linha.appendChild(el('div', 'nro-grande', 'NRO ' + nro));
-    const ROT = { local: ['amarelo', '📱 ' + fila.length + ' no celular'], feito: ['verde', '✅ fotografado'], pendente: ['', 'pendente'], refazer: ['amarelo', '⚠️ refazer'], bloq: ['vermelho', 'NÃO DESTINAR'] }[e];
+    const ROT = { local: ['amarelo', '📱 ' + fila.length + ' no celular'], feito: ['verde', '✅ fotografado'], pendente: ['', 'pendente'], bloq: ['vermelho', 'NÃO DESTINAR'] }[e];
     linha.appendChild(el('span', 'tag ' + ROT[0], ROT[1]));
     topo.appendChild(linha);
     topo.appendChild(el('div', 'placa-grande', v.placa ? v.placa + (v.uf ? ' · ' + v.uf : '') : (st.sel.foraDaLista || v.foraDaLista ? 'Fora da lista' : 'Sem placa')));
     topo.appendChild(el('div', 'suave', [v.modelo, v.cor, CAT_NOMES[v.categoria]].filter(Boolean).join(' · ')));
-    if (e === 'refazer') topo.appendChild(el('div', 'aviso-refazer', 'A gestão pediu foto nova deste veículo.'));
 
     const boxL = $('galeriaLocais'), boxE = $('galeriaEnviadas');
     boxL.querySelectorAll('img').forEach(function (i) { if (i.src.indexOf('blob:') === 0) URL.revokeObjectURL(i.src); });
@@ -754,8 +773,7 @@
     await recarregarFila();
     const token = await N.kvGet('token');
     if (!st.sessao || !token) { history.replaceState({ tela: 'telaLogin' }, ''); mostrar('telaLogin', false); return; }
-    history.replaceState({ tela: 'telaPatios' }, '');
-    mostrar('telaPatios', false);
+    abrirInicio();
     if (navigator.onLine) { await atualizarListas(true); enviarFila(); }
   })();
 })();

@@ -36,14 +36,17 @@
       <button data-aba="abaConta">Minha senha</button>
     </div>
 
-    <div id="abaLotes" class="tres-col">
-      <aside class="col col-patios">
-        <div class="col-cab"><span>Pátios</span><button class="btn pequeno cinza" id="btnRecarregar" title="Atualizar">🔄</button></div>
-        <div id="listaLotes"></div>
-      </aside>
-      <section class="col col-lista" id="colLista"><p class="vazio">Escolha um pátio à esquerda para ver os veículos e as fotos.</p></section>
-      <section class="col col-detalhe" id="colDetalhe"><p class="vazio">As fotos do veículo aparecem aqui.</p></section>
+    <div id="abaLotes">
+      <div id="seletorPatios">
+        <div class="col-cab"><span>Escolha o pátio</span><button class="btn pequeno cinza" id="btnRecarregar" title="Atualizar">🔄 Atualizar</button></div>
+        <div id="listaLotes" class="grade-patios"></div>
+      </div>
+      <div id="painelPatio" class="oculto"></div>
     </div>
+    <aside id="gaveta" class="gaveta oculto" aria-label="Detalhes">
+      <button class="gaveta-fechar" id="btnFecharGaveta" aria-label="Fechar">×</button>
+      <div id="gavetaConteudo"></div>
+    </aside>
 
     <div id="abaNovo" class="oculto">
       <div class="cartao">
