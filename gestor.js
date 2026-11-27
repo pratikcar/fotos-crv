@@ -178,7 +178,7 @@
       b.dataset.lote = l.loteId;
       const icb = el('div', 'kpi-ic'); icb.appendChild(ic('pin')); b.appendChild(icb);
       const corpo = el('div', 'corpo');
-      const pct = l.destinaveis ? Math.round(100 * l.fotografados / l.destinaveis) : 0;
+      const pct = l.destinaveis ? Math.floor(100 * l.fotografados / l.destinaveis) : 0;
       const ln = el('div', 'nome-linha'); ln.appendChild(el('div', 'nome', l.patio)); ln.appendChild(el('span', 'pct', pct + '%')); corpo.appendChild(ln);
       corpo.appendChild(el('div', 'info', (l.numeroLote ? 'Lista ' + l.numeroLote + ' · ' : '') + 'criado em ' + data(l.criadoEm).split(',')[0]));
       const pr = el('div', 'progresso-txt'); pr.appendChild(el('b', null, l.fotografados + ' de ' + l.destinaveis)); pr.appendChild(document.createTextNode(' fotografados · ' + plural(l.fotos, 'foto', 'fotos')));
@@ -225,7 +225,17 @@
     faixa.appendChild(el('span', 'meta', (l.numeroLote ? 'Lista ' + l.numeroLote + ' · ' : '') + 'criado em ' + data(l.criadoEm)));
     const bTrocar = botao('btn pequeno cinza', 'trocar', 'Trocar pátio');
     bTrocar.addEventListener('click', function () { desenharPatios(); mostrarSeletor(); });
-    faixa.appendChild(bTrocar);
+    const bAtu = botao('btn pequeno cinza btn-atualizar', 'atualizar', 'Atualizar');
+    bAtu.title = 'Buscar fotos novas do campo';
+    bAtu.addEventListener('click', async function () {
+      bAtu.disabled = true; bAtu.classList.add('girando');
+      const antes = l.fotos;
+      await recarregarPatio();
+      const agora = (st.lotes.find(function (x) { return x.loteId === l.loteId; }) || {}).fotos;
+      toast(agora > antes ? plural(agora - antes, 'foto nova', 'fotos novas') + ' do campo' : 'Atualizado · nada novo');
+    });
+    const bx = el('div', 'faixa-botoes'); bx.appendChild(bAtu); bx.appendChild(bTrocar);
+    faixa.appendChild(bx);
     pp.appendChild(faixa);
 
     // ações do pátio

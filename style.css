@@ -707,3 +707,10 @@ html { scrollbar-gutter: stable; }
 .chip-filtro.ativo { background: #ffedd5; color: #7c2d12; border-color: #fdba74; }
 .gaveta .nota-dificil { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
 .placa-vis.peq { min-width: 118px; }
+.faixa-botoes { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.faixa-patio .faixa-botoes .btn { margin-left: 0; }
+.btn-atualizar.girando .ic { animation: girar 1s linear infinite; }
+@media (max-width: 700px) { .faixa-botoes { width: 100%; } .faixa-botoes .btn { flex: 1 1 0; } }
+#listaPatios .nome-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+#listaPatios .pct { font-weight: 900; font-size: 22px; color: var(--primaria); font-variant-numeric: tabular-nums; }
+#listaPatios .pct.completo { color: var(--verde); }

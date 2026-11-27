@@ -143,6 +143,7 @@
     });
     st.pendLocal = mapa;
     st.acoesPend = acoes;
+    st.acoesLista = fila.filter(function (f) { return f.tipo === 'acao'; });
     st.filaTotal = fotos;
     st.acoesTotal = fila.length - fotos;
     return fila.filter(function (f) { return f.tipo !== 'acao'; });
@@ -179,9 +180,11 @@
     let cls, icone, texto;
     const nf = plural(st.filaTotal, 'foto', 'fotos');
     const aviso = st.aviso && Date.now() < st.aviso.ate ? st.aviso.msg : null;
-    if (st.enviando) { cls = 'envio'; icone = 'sync'; texto = 'Enviando ' + nf + '…'; }
+    const na = st.acoesTotal || 0;
+    if (st.enviando && st.filaTotal) { cls = 'envio'; icone = 'sync'; texto = 'Enviando ' + nf + '…'; }
     else if (st.filaTotal) { cls = 'pend'; icone = on ? 'upload' : 'semsinal'; texto = on ? nf + ' para enviar · toque para ver' : 'Sem sinal · ' + nf + ' no celular'; }
     else if (!on) { cls = 'off'; icone = 'semsinal'; texto = 'Sem sinal · pode continuar fotografando'; }
+    else if (na && !st.enviando) { cls = 'pend'; icone = 'upload'; texto = plural(na, 'marcação', 'marcações') + ' de difícil acesso para enviar · toque para ver'; }
     else { cls = 'ok'; icone = 'check'; texto = 'Tudo enviado'; }
     if (aviso) { texto = aviso; if (cls === 'ok') icone = 'check'; }
     sp.className = 'faixa-sync ' + cls + (aviso ? ' com-aviso' : '');
@@ -320,7 +323,8 @@
       const b = el('button', 'botao-grande' + (largo() && l.loteId === st.loteId ? ' sel' : ''));
       const icb = el('div', 'icone-cat'); icb.appendChild(ic('pin')); b.appendChild(icb);
       const corpo = el('div', 'corpo');
-      corpo.appendChild(el('div', 'nome', l.patio));
+      const pct = c.total ? Math.floor(100 * c.feitos / c.total) : 0;
+      const ln = el('div', 'nome-linha'); ln.appendChild(el('div', 'nome', l.patio)); ln.appendChild(el('span', 'pct' + (pct >= 100 ? ' completo' : ''), pct + '%')); corpo.appendChild(ln);
       if (l.numeroLote) corpo.appendChild(el('div', 'info', 'Lista ' + l.numeroLote));
       corpo.appendChild(progresso(c.feitos, c.total));
       b.appendChild(corpo);
@@ -906,15 +910,34 @@
     const fila = await recarregarFila();
     atualizarSelos();
     const travadas = fila.filter(function (f) { return f.travada; }).length;
-    $('filaResumo').textContent = fila.length
+    $('filaResumo').textContent = (fila.length || st.acoesTotal)
       ? (travadas ? travadas + ' com problema · ' : '') + (navigator.onLine ? 'Enviando automaticamente.' : 'Pode continuar fotografando: o envio é automático quando o sinal voltar.')
       : 'Todas as fotos foram enviadas. ✓';
-    $('btnEnviarAgora').classList.toggle('oculto', !fila.length || !navigator.onLine);
+    $('btnEnviarAgora').classList.toggle('oculto', !(fila.length || st.acoesTotal) || !navigator.onLine);
     const box = $('filaItens');
     box.querySelectorAll('img').forEach(function (i) { URL.revokeObjectURL(i.src); });
     box.textContent = '';
     const nomes = {};
     ((st.dados && st.dados.lotes) || []).forEach(function (l) { nomes[l.loteId] = l.patio; });
+    (st.acoesLista || []).forEach(function (a) {
+      const c = el('div', 'item');
+      const ib = el('div', 'estado'); ib.appendChild(ic('alerta')); c.appendChild(ib);
+      const d = el('div', 'desc');
+      d.appendChild(el('div', 'placa', 'NRO ' + a.nro + ' · ' + (a.dificil ? 'difícil acesso' : 'desfazer difícil acesso')));
+      d.appendChild(el('div', 'mod', (nomes[a.loteId] || 'pátio encerrado') + (a.erro ? ' · ' + a.erro : '')));
+      c.appendChild(d);
+      if (a.travada || a.erro) {
+        const col = el('div');
+        const tentar = el('button', 'btn pequeno', 'Tentar');
+        tentar.addEventListener('click', async function () { a.travada = false; a.tentativas = 0; a.erro = ''; await N.filaPut(a); enviarFila(true); });
+        const apagar = el('button', 'btn pequeno vermelho', 'Descartar');
+        apagar.addEventListener('click', async function () { await N.filaDel(a.uuid); await recarregarFila(); desenhar(); });
+        col.appendChild(tentar); col.appendChild(apagar); c.appendChild(col);
+      } else {
+        const w = el('span', 'tag amarelo'); w.appendChild(ic('upload')); w.appendChild(document.createTextNode('Aguardando envio')); d.appendChild(w);
+      }
+      box.appendChild(c);
+    });
     const posNro = {};
     fila.forEach(function (f) {
       const k = f.loteId + '|' + f.nro; const pos = posNro[k] = (posNro[k] === undefined ? 0 : posNro[k] + 1);
@@ -998,7 +1021,7 @@
   document.addEventListener('visibilitychange', function () { atualizarSePreciso(30000); });
   window.addEventListener('online', function () { atualizarSelos(); enviarFila(); atualizarSePreciso(0); });
   window.addEventListener('offline', atualizarSelos);
-  setInterval(function () { if (navigator.onLine && st.filaTotal && !st.enviando) enviarFila(); }, 60000);
+  setInterval(function () { if (navigator.onLine && (st.filaTotal || st.acoesTotal) && !st.enviando) enviarFila(); }, 60000);
 
   // versões misturadas (página antiga + código novo) → limpa o cache do app e recarrega uma vez
   const versaoPagina = (document.querySelector('meta[name=versao]') || {}).content;
