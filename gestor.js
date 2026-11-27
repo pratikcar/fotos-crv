@@ -59,7 +59,11 @@
   function abrirApp() {
     $('telaLogin').classList.add('oculto'); $('telaApp').classList.remove('oculto');
     $('btnSair').classList.remove('oculto');
-    $('quem').textContent = st.sessao.nome || st.sessao.usuario;
+    const papelTxt = { admin: 'Administrador', gestor: 'Gestão', campo: 'Campo' }[st.sessao.papel] || st.sessao.papel;
+    const nomeTxt = st.sessao.nome && st.sessao.nome !== papelTxt ? st.sessao.nome : st.sessao.usuario;
+    const q = $('quem'); q.textContent = '';
+    q.appendChild(ic('usuarios', 'p')); q.appendChild(el('b', 'quem-nome', nomeTxt)); q.appendChild(el('span', 'quem-papel', ' · ' + papelTxt));
+    q.title = nomeTxt + ' (' + st.sessao.usuario + ') · ' + papelTxt;
     $('botaoAbaUsuarios').classList.toggle('oculto', st.sessao.papel !== 'admin');
     trocarAba('abaLotes');
   }
